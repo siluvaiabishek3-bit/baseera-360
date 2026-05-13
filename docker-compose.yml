@@ -1,0 +1,95 @@
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15-alpine
+    container_name: baseera-360-postgres
+    environment:
+      POSTGRES_USER: baseera_app
+      POSTGRES_PASSWORD: secure_password
+      POSTGRES_DB: baseera_360
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./database/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U baseera_app"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - baseera-network
+
+  # Node.js Backend API
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: baseera-360-backend
+    environment:
+      NODE_ENV: development
+      PORT: 3000
+      DATABASE_URL: postgresql://baseera_app:secure_password@postgres:5432/baseera_360
+      JWT_SECRET: dev-secret-key-change-in-production
+      CORS_ORIGIN: http://localhost:3001,http://localhost:3000
+    ports:
+      - "3000:3000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ./backend/src:/app/src
+      - ./backend/dist:/app/dist
+    command: npm run dev
+    networks:
+      - baseera-network
+
+  # React Frontend
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: baseera-360-frontend
+    environment:
+      REACT_APP_API_URL: http://localhost:3000/api
+    ports:
+      - "3001:3000"
+    depends_on:
+      - backend
+    volumes:
+      - ./frontend/src:/app/src
+    networks:
+      - baseera-network
+
+  # pgAdmin for database management (optional)
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: baseera-360-pgadmin
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@baseera.ae
+      PGADMIN_DEFAULT_PASSWORD: admin
+    ports:
+      - "5050:80"
+    depends_on:
+      - postgres
+    networks:
+      - baseera-network
+
+  # Redis for caching (optional)
+  redis:
+    image: redis:7-alpine
+    container_name: baseera-360-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - baseera-network
+
+volumes:
+  postgres_data:
+  redis_data:
+
+networks:
+  baseera-network:
+    driver: bridge
