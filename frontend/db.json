@@ -17,8 +17,29 @@
       "buildingName": "Test Building",
       "clientName": "Test Client",
       "createdBy": "1"
+    },
+    {
+      "name": "Glass Room Metal",
+      "description": "Facade Inspection",
+      "buildingName": "Rolex Tower",
+      "clientName": "Seddiqi",
+      "jobNumber": "001",
+      "facadeType": "Glass Curtain Wall",
+      "createdBy": "1",
+      "id": "C12Fd1aAL1E"
+    },
+    {
+      "name": "GISDrones",
+      "description": "Building Facade Inspection",
+      "buildingName": "The View Al Barsha",
+      "clientName": "Sheraton",
+      "jobNumber": "002",
+      "facadeType": "Stone Cladding",
+      "createdBy": "1",
+      "id": "USkURktrwnc"
     }
   ],
   "media": [],
-  "annotations": []
+  "annotations": [],
+  "$schema": "./node_modules/json-server/schema.json"
 }

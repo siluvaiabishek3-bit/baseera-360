@@ -1,369 +1,334 @@
-/**
- * BASEERA 360 - Projects Dashboard
- * Display and manage inspection projects
- */
-
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import apiClient from '@/services/api';
-
-interface Project {
-  id: string;
-  project_name: string;
-  building_name: string;
-  job_number: string;
-  facade_type: string;
-  client_name: string;
-  status: string;
-  media_count: number;
-  annotation_count: number;
-}
+import { Plus, Search, Filter, Folder, Calendar, User, MapPin, MoreVertical, Edit, Trash2, Eye } from 'lucide-react';
 
 export function ProjectsPage() {
-  const [projects, setProjects] = useState<Project[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [user, setUser] = useState<any>(null);
-  const [showForm, setShowForm] = useState(false);
-  const [formData, setFormData] = useState({
-    projectName: '',
-    buildingName: '',
-    jobNumber: '',
-    facadeType: 'Glass Curtain Wall',
-    clientName: '',
-    latitude: 28.5244,
-    longitude: 55.2664,
-    address: 'Dubai, UAE',
-  });
-  const [error, setError] = useState('');
   const navigate = useNavigate();
+  const [projects, setProjects] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [newProject, setNewProject] = useState({
+    name: '',
+    description: '',
+    buildingName: '',
+    clientName: '',
+    jobNumber: '',
+    facadeType: '',
+  });
 
   useEffect(() => {
-    loadData();
+    fetchProjects();
   }, []);
 
-  const loadData = async () => {
+  const fetchProjects = async () => {
     try {
-      setLoading(true);
-      
-      // Get current user
-      const userResponse = await apiClient.getCurrentUser();
-      setUser(userResponse.data.user);
-
-      // Get projects
-      const projectsResponse = await apiClient.getProjects();
-      setProjects(projectsResponse.data.projects || []);
-    } catch (error: any) {
-      console.error('Failed to load data:', error);
-      // If unauthorized, go back to login
-      if (error.response?.status === 401) {
-        navigate('/login');
-      } else {
-        setError('Failed to load projects');
-      }
+      const response = await fetch('http://localhost:3000/projects');
+      const data = await response.json();
+      setProjects(data || []);
+    } catch (error) {
+      console.error('Error:', error);
     } finally {
       setLoading(false);
     }
   };
 
-  const handleCreateProject = async (e: React.FormEvent) => {
+  const handleCreateProject = async (e: any) => {
     e.preventDefault();
-    setError('');
-
     try {
-      const response = await apiClient.createProject(formData);
-      
-      // Add new project to list
-      setProjects([response.data.project, ...projects]);
-      
-      // Reset form
-      setFormData({
-        projectName: '',
-        buildingName: '',
-        jobNumber: '',
-        facadeType: 'Glass Curtain Wall',
-        clientName: '',
-        latitude: 28.5244,
-        longitude: 55.2664,
-        address: 'Dubai, UAE',
+      const response = await fetch('http://localhost:3000/projects', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ...newProject,
+          createdBy: '1',
+          id: Date.now().toString(),
+        }),
       });
-      setShowForm(false);
-    } catch (err: any) {
-      const message = err.response?.data?.error?.message || 'Failed to create project';
-      setError(message);
-    }
-  };
-
-  const handleLogout = async () => {
-    try {
-      await apiClient.logout();
-      navigate('/login');
+      
+      if (response.ok) {
+        setShowCreateModal(false);
+        setNewProject({
+          name: '',
+          description: '',
+          buildingName: '',
+          clientName: '',
+          jobNumber: '',
+          facadeType: '',
+        });
+        fetchProjects();
+      }
     } catch (error) {
-      console.error('Logout failed:', error);
-      navigate('/login');
+      console.error('Error:', error);
     }
   };
 
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="text-center">
-          <div className="text-4xl mb-4">🔄</div>
-          <p className="text-gray-600">Loading projects...</p>
-        </div>
-      </div>
-    );
-  }
+  const filteredProjects = projects.filter((project: any) =>
+    project.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    project.clientName?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    project.buildingName?.toLowerCase().includes(searchQuery.toLowerCase())
+  );
 
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* Header */}
-      <header className="bg-white shadow">
-        <div className="max-w-7xl mx-auto px-4 py-6 flex justify-between items-center">
+      {/* HEADER */}
+      <div className="bg-white border-b border-gray-200 px-8 py-6">
+        <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-3xl font-bold text-gray-900">BASEERA 360</h1>
-            <p className="text-gray-600">Facade Inspection Platform</p>
+            <h1 className="text-3xl font-bold text-gray-900">Projects</h1>
+            <p className="text-gray-600 mt-1">Manage your facade inspection projects</p>
           </div>
-          <div className="flex items-center gap-4">
-            <div className="text-right">
-              <p className="text-sm text-gray-600">Logged in as</p>
-              <p className="font-semibold text-gray-900">
-                {user?.firstName} {user?.lastName}
-              </p>
-              <p className="text-xs text-gray-500">{user?.role}</p>
-            </div>
-            <button
-              onClick={handleLogout}
-              className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition"
-            >
-              Logout
-            </button>
-          </div>
-        </div>
-      </header>
-
-      {/* Main Content */}
-      <main className="max-w-7xl mx-auto px-4 py-8">
-        {/* Title & Actions */}
-        <div className="flex justify-between items-center mb-8">
-          <h2 className="text-2xl font-bold text-gray-900">Projects</h2>
           <button
-            onClick={() => setShowForm(!showForm)}
-            className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition font-semibold"
+            onClick={() => setShowCreateModal(true)}
+            className="flex items-center gap-2 bg-blue-900 text-white px-6 py-3 rounded-lg hover:bg-blue-800 transition-all font-semibold shadow-sm"
           >
-            {showForm ? '✕ Cancel' : '+ New Project'}
+            <Plus size={20} />
+            New Project
           </button>
         </div>
 
-        {/* Error Message */}
-        {error && (
-          <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg">
-            <p className="text-red-800">{error}</p>
+        {/* SEARCH & FILTERS */}
+        <div className="mt-6 flex gap-4">
+          <div className="flex-1 flex items-center gap-2 bg-gray-100 px-4 py-3 rounded-lg">
+            <Search size={20} className="text-gray-400" />
+            <input
+              type="text"
+              placeholder="Search projects by name, client, or building..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="bg-transparent outline-none w-full"
+            />
+          </div>
+          <button className="flex items-center gap-2 bg-white border border-gray-300 px-4 py-3 rounded-lg hover:bg-gray-50 transition">
+            <Filter size={20} />
+            Filter
+          </button>
+        </div>
+      </div>
+
+      {/* PROJECTS GRID */}
+      <div className="p-8">
+        {loading ? (
+          <div className="text-center py-16">
+            <div className="inline-block animate-spin w-12 h-12 border-4 border-blue-600 border-t-transparent rounded-full"></div>
+            <p className="text-gray-600 mt-4">Loading projects...</p>
+          </div>
+        ) : filteredProjects.length === 0 ? (
+          <div className="text-center py-16">
+            <div className="w-24 h-24 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
+              <Folder size={48} className="text-gray-400" />
+            </div>
+            <h3 className="text-xl font-bold text-gray-900 mb-2">
+              {searchQuery ? 'No projects found' : 'No projects yet'}
+            </h3>
+            <p className="text-gray-600 mb-6">
+              {searchQuery
+                ? 'Try adjusting your search criteria'
+                : 'Create your first project to get started'}
+            </p>
+            {!searchQuery && (
+              <button
+                onClick={() => setShowCreateModal(true)}
+                className="bg-blue-900 text-white px-6 py-3 rounded-lg hover:bg-blue-800 transition font-semibold"
+              >
+                Create Project
+              </button>
+            )}
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {filteredProjects.map((project: any) => (
+              <div
+                key={project.id}
+                className="bg-white rounded-xl shadow-sm border border-gray-200 hover:shadow-lg transition-all cursor-pointer overflow-hidden"
+              >
+                {/* PROJECT HEADER */}
+                <div className="bg-gradient-to-r from-blue-900 to-blue-800 p-6 text-white">
+                  <div className="flex items-start justify-between">
+                    <div className="flex-1">
+                      <h3 className="font-bold text-xl mb-2">{project.name}</h3>
+                      <p className="text-blue-100 text-sm line-clamp-2">
+                        {project.description || 'No description'}
+                      </p>
+                    </div>
+                    <button className="p-2 hover:bg-blue-700 rounded-lg transition">
+                      <MoreVertical size={20} />
+                    </button>
+                  </div>
+                </div>
+
+                {/* PROJECT DETAILS */}
+                <div className="p-6 space-y-3">
+                  <div className="flex items-center gap-3 text-sm">
+                    <MapPin size={16} className="text-gray-400" />
+                    <span className="text-gray-900 font-medium">
+                      {project.buildingName || 'No building name'}
+                    </span>
+                  </div>
+
+                  <div className="flex items-center gap-3 text-sm">
+                    <User size={16} className="text-gray-400" />
+                    <span className="text-gray-600">
+                      {project.clientName || 'No client'}
+                    </span>
+                  </div>
+
+                  <div className="flex items-center gap-3 text-sm">
+                    <Folder size={16} className="text-gray-400" />
+                    <span className="text-gray-600">
+                      Job #{project.jobNumber || 'N/A'}
+                    </span>
+                  </div>
+
+                  <div className="flex items-center gap-3 text-sm">
+                    <Calendar size={16} className="text-gray-400" />
+                    <span className="text-gray-600">
+                      {project.facadeType || 'No facade type'}
+                    </span>
+                  </div>
+                </div>
+
+                {/* ACTIONS */}
+                <div className="border-t border-gray-200 p-4 bg-gray-50 flex gap-2">
+                  <button 
+  onClick={() => navigate(`/projects/${project.id}`)}
+  className="flex-1 flex items-center justify-center gap-2 bg-white border border-gray-300 px-4 py-2 rounded-lg hover:bg-gray-100 transition text-sm font-semibold"
+>
+  <Eye size={16} />
+  View
+</button>
+                  <button className="flex items-center justify-center gap-2 bg-white border border-gray-300 px-4 py-2 rounded-lg hover:bg-gray-100 transition">
+                    <Edit size={16} />
+                  </button>
+                  <button className="flex items-center justify-center gap-2 bg-white border border-red-300 text-red-600 px-4 py-2 rounded-lg hover:bg-red-50 transition">
+                    <Trash2 size={16} />
+                  </button>
+                </div>
+              </div>
+            ))}
           </div>
         )}
+      </div>
 
-        {/* Create Project Form */}
-        {showForm && (
-          <form
-            onSubmit={handleCreateProject}
-            className="bg-white rounded-lg shadow p-6 mb-8"
-          >
-            <h3 className="text-xl font-bold text-gray-900 mb-6">Create New Project</h3>
+      {/* CREATE PROJECT MODAL */}
+      {showCreateModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="p-6 border-b border-gray-200">
+              <h2 className="text-2xl font-bold text-gray-900">Create New Project</h2>
+              <p className="text-gray-600 mt-1">Fill in the project details below</p>
+            </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <form onSubmit={handleCreateProject} className="p-6 space-y-4">
               <div>
                 <label className="block text-sm font-semibold text-gray-700 mb-2">
                   Project Name *
                 </label>
                 <input
                   type="text"
-                  value={formData.projectName}
-                  onChange={(e) =>
-                    setFormData({ ...formData, projectName: e.target.value })
-                  }
-                  placeholder="e.g., Marina Tower Annual Inspection"
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  value={newProject.name}
+                  onChange={(e) => setNewProject({ ...newProject, name: e.target.value })}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  placeholder="e.g., Dubai Marina Tower Inspection"
                   required
                 />
               </div>
 
               <div>
                 <label className="block text-sm font-semibold text-gray-700 mb-2">
-                  Building Name *
+                  Description
                 </label>
-                <input
-                  type="text"
-                  value={formData.buildingName}
-                  onChange={(e) =>
-                    setFormData({ ...formData, buildingName: e.target.value })
-                  }
-                  placeholder="e.g., Marina Tower"
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  required
+                <textarea
+                  value={newProject.description}
+                  onChange={(e) => setNewProject({ ...newProject, description: e.target.value })}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  placeholder="Brief description of the project"
+                  rows={3}
                 />
               </div>
 
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">
-                  Job Number *
-                </label>
-                <input
-                  type="text"
-                  value={formData.jobNumber}
-                  onChange={(e) =>
-                    setFormData({ ...formData, jobNumber: e.target.value })
-                  }
-                  placeholder="e.g., MAR-2024-001"
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  required
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">
-                  Facade Type
-                </label>
-                <select
-                  value={formData.facadeType}
-                  onChange={(e) =>
-                    setFormData({ ...formData, facadeType: e.target.value })
-                  }
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                >
-                  <option>Glass Curtain Wall</option>
-                  <option>Stone Facade</option>
-                  <option>Metal Panels</option>
-                  <option>Mixed Materials</option>
-                  <option>Other</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">
-                  Client Name
-                </label>
-                <input
-                  type="text"
-                  value={formData.clientName}
-                  onChange={(e) =>
-                    setFormData({ ...formData, clientName: e.target.value })
-                  }
-                  placeholder="e.g., DAMAC Properties"
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">
-                  Address
-                </label>
-                <input
-                  type="text"
-                  value={formData.address}
-                  onChange={(e) =>
-                    setFormData({ ...formData, address: e.target.value })
-                  }
-                  placeholder="e.g., Downtown Dubai"
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                />
-              </div>
-            </div>
-
-            <div className="flex gap-4 mt-6">
-              <button
-                type="submit"
-                className="px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition font-semibold"
-              >
-                ✓ Create Project
-              </button>
-              <button
-                type="button"
-                onClick={() => setShowForm(false)}
-                className="px-6 py-3 bg-gray-300 text-gray-800 rounded-lg hover:bg-gray-400 transition font-semibold"
-              >
-                Cancel
-              </button>
-            </div>
-          </form>
-        )}
-
-        {/* Projects Grid */}
-        {projects.length === 0 ? (
-          <div className="bg-white rounded-lg shadow p-12 text-center">
-            <div className="text-5xl mb-4">📁</div>
-            <h3 className="text-xl font-semibold text-gray-900 mb-2">No projects yet</h3>
-            <p className="text-gray-600 mb-6">
-              Create your first project to start inspecting facades
-            </p>
-            <button
-              onClick={() => setShowForm(true)}
-              className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition font-semibold"
-            >
-              + Create Project
-            </button>
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {projects.map((project) => (
-              <div
-                key={project.id}
-                onClick={() => navigate(`/projects/${project.id}`)}
-                className="bg-white rounded-lg shadow hover:shadow-lg cursor-pointer transition p-6"
-              >
-                <div className="mb-4">
-                  <h3 className="text-lg font-bold text-gray-900 mb-1">
-                    {project.project_name}
-                  </h3>
-                  <p className="text-sm text-gray-600">{project.building_name}</p>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">
+                    Building Name *
+                  </label>
+                  <input
+                    type="text"
+                    value={newProject.buildingName}
+                    onChange={(e) => setNewProject({ ...newProject, buildingName: e.target.value })}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    placeholder="e.g., Marina Heights"
+                    required
+                  />
                 </div>
 
-                <div className="mb-4 space-y-2">
-                  <div className="flex justify-between text-sm">
-                    <span className="text-gray-600">Job Number:</span>
-                    <span className="font-semibold text-gray-900">{project.job_number}</span>
-                  </div>
-                  <div className="flex justify-between text-sm">
-                    <span className="text-gray-600">Facade Type:</span>
-                    <span className="font-semibold text-gray-900">{project.facade_type}</span>
-                  </div>
-                  {project.client_name && (
-                    <div className="flex justify-between text-sm">
-                      <span className="text-gray-600">Client:</span>
-                      <span className="font-semibold text-gray-900">{project.client_name}</span>
-                    </div>
-                  )}
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">
+                    Client Name *
+                  </label>
+                  <input
+                    type="text"
+                    value={newProject.clientName}
+                    onChange={(e) => setNewProject({ ...newProject, clientName: e.target.value })}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    placeholder="e.g., Emaar Properties"
+                    required
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">
+                    Job Number
+                  </label>
+                  <input
+                    type="text"
+                    value={newProject.jobNumber}
+                    onChange={(e) => setNewProject({ ...newProject, jobNumber: e.target.value })}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    placeholder="e.g., JOB-2024-001"
+                  />
                 </div>
 
-                <div className="border-t border-gray-200 pt-4 flex gap-4 text-sm">
-                  <div className="flex-1">
-                    <p className="text-gray-600">Media</p>
-                    <p className="text-2xl font-bold text-blue-600">
-                      {project.media_count || 0}
-                    </p>
-                  </div>
-                  <div className="flex-1">
-                    <p className="text-gray-600">Defects</p>
-                    <p className="text-2xl font-bold text-red-600">
-                      {project.annotation_count || 0}
-                    </p>
-                  </div>
-                </div>
-
-                <div className="mt-4 pt-4 border-t border-gray-200">
-                  <span
-                    className={`inline-block px-3 py-1 rounded-full text-xs font-semibold ${
-                      project.status === 'ACTIVE'
-                        ? 'bg-green-100 text-green-800'
-                        : 'bg-gray-100 text-gray-800'
-                    }`}
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">
+                    Facade Type
+                  </label>
+                  <select
+                    value={newProject.facadeType}
+                    onChange={(e) => setNewProject({ ...newProject, facadeType: e.target.value })}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   >
-                    {project.status}
-                  </span>
+                    <option value="">Select type</option>
+                    <option value="Glass Curtain Wall">Glass Curtain Wall</option>
+                    <option value="Stone Cladding">Stone Cladding</option>
+                    <option value="Metal Panels">Metal Panels</option>
+                    <option value="Concrete">Concrete</option>
+                    <option value="Mixed">Mixed</option>
+                  </select>
                 </div>
               </div>
-            ))}
+
+              <div className="flex gap-3 pt-4">
+                <button
+                  type="button"
+                  onClick={() => setShowCreateModal(false)}
+                  className="flex-1 px-6 py-3 border border-gray-300 rounded-lg hover:bg-gray-50 transition font-semibold"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="flex-1 px-6 py-3 bg-blue-900 text-white rounded-lg hover:bg-blue-800 transition font-semibold"
+                >
+                  Create Project
+                </button>
+              </div>
+            </form>
           </div>
-        )}
-      </main>
+        </div>
+      )}
     </div>
   );
 }
