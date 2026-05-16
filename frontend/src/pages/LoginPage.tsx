@@ -18,30 +18,20 @@ export function LoginPage() {
 
   const navigate = useNavigate();
 
-  const handleLogin = async (e: React.FormEvent) => {
-  e.preventDefault();
-  setLoading(true);
-  setError('');
+  const handleLogin = () => {
+    if (!email || !password) {
+      setError('Please enter email and password');
+      return;
+    }
 
-  try {
-    // Mock login - accept any email/password
-    localStorage.setItem('token', 'mock-token-12345');
-    localStorage.setItem('user', JSON.stringify({
-      id: '1',
-      email: email,
-      role: 'ENGINEER',
-      firstName: 'Test',
-      lastName: 'User'
-    }));
-
-    // Navigate to dashboard
-    navigate('/projects');
-  } catch (err: any) {
-    setError('Login failed');
-  } finally {
-    setLoading(false);
-  }
-};
+    if (email === 'test@baseera.ae' && password === 'password123') {
+      localStorage.setItem('token', 'mock-jwt-token');
+      localStorage.setItem('user', JSON.stringify({ email, role: 'ENGINEER' }));
+      navigate('/dashboard');
+    } else {
+      setError('Invalid credentials. Use test@baseera.ae / password123');
+    }
+  };
 
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();

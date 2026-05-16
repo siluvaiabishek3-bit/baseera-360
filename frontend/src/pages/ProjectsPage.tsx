@@ -1,21 +1,27 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Search, Filter, Folder, Calendar, User, MapPin, MoreVertical, Edit, Trash2, Eye } from 'lucide-react';
+import { Plus, Edit2, Trash2, Eye } from 'lucide-react';
+import { mockAPI } from '@/services/mockDataService';
 
 export function ProjectsPage() {
   const navigate = useNavigate();
-  const [projects, setProjects] = useState([]);
+  const [projects, setProjects] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [searchQuery, setSearchQuery] = useState('');
   const [showCreateModal, setShowCreateModal] = useState(false);
-  const [newProject, setNewProject] = useState({
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editingProject, setEditingProject] = useState<any>(null);
+
+  const [formData, setFormData] = useState({
     name: '',
     description: '',
     buildingName: '',
     clientName: '',
     jobNumber: '',
-    facadeType: '',
+    facadeType: 'Curtain Wall',
+    currentStage: 'Planning',
   });
+
+  const projectStages = ['Planning', 'Field Inspection', 'Annotation', 'Completed'];
 
   useEffect(() => {
     fetchProjects();
@@ -23,309 +29,1033 @@ export function ProjectsPage() {
 
   const fetchProjects = async () => {
     try {
-      const response = await fetch('http://localhost:3000/projects');
-      const data = await response.json();
-      setProjects(data || []);
+      const data = await mockAPI.getProjects();
+      setProjects(data);
     } catch (error) {
-      console.error('Error:', error);
+      console.error('Error fetching projects:', error);
     } finally {
       setLoading(false);
     }
   };
 
-  const handleCreateProject = async (e: any) => {
-    e.preventDefault();
+  const handleCreateProject = async () => {
+    if (!formData.name || !formData.buildingName || !formData.clientName) {
+      alert('Please fill in all required fields');
+      return;
+    }
+
     try {
-      const response = await fetch('http://localhost:3000/projects', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          ...newProject,
-          createdBy: '1',
-          id: Date.now().toString(),
-        }),
+      await mockAPI.createProject({
+        ...formData,
+        status: 'active',
+        createdAt: new Date().toLocaleDateString(),
       });
-      
-      if (response.ok) {
-        setShowCreateModal(false);
-        setNewProject({
-          name: '',
-          description: '',
-          buildingName: '',
-          clientName: '',
-          jobNumber: '',
-          facadeType: '',
-        });
-        fetchProjects();
-      }
+      fetchProjects();
+      resetForm();
+      setShowCreateModal(false);
     } catch (error) {
-      console.error('Error:', error);
+      console.error('Error creating project:', error);
+      alert('Error creating project');
     }
   };
 
-  const filteredProjects = projects.filter((project: any) =>
-    project.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    project.clientName?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    project.buildingName?.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  const handleUpdateProject = async () => {
+    if (!formData.name || !formData.buildingName || !formData.clientName) {
+      alert('Please fill in all required fields');
+      return;
+    }
+
+    try {
+      await mockAPI.updateProject(editingProject.id, formData);
+      fetchProjects();
+      resetForm();
+      setShowEditModal(false);
+      setEditingProject(null);
+    } catch (error) {
+      console.error('Error updating project:', error);
+      alert('Error updating project');
+    }
+  };
+
+  const handleDeleteProject = async (id: string) => {
+    if (window.confirm('Are you sure you want to delete this project?')) {
+      try {
+        await mockAPI.deleteProject(id);
+        fetchProjects();
+      } catch (error) {
+        console.error('Error deleting project:', error);
+        alert('Error deleting project');
+      }
+    }
+  };
+
+  const handleEditProject = (project: any) => {
+    setEditingProject(project);
+    setFormData({
+      name: project.name,
+      description: project.description || '',
+      buildingName: project.buildingName,
+      clientName: project.clientName,
+      jobNumber: project.jobNumber || '',
+      facadeType: project.facadeType || 'Curtain Wall',
+      currentStage: project.currentStage || 'Planning',
+    });
+    setShowEditModal(true);
+  };
+
+  const resetForm = () => {
+    setFormData({
+      name: '',
+      description: '',
+      buildingName: '',
+      clientName: '',
+      jobNumber: '',
+      facadeType: 'Curtain Wall',
+      currentStage: 'Planning',
+    });
+  };
+
+  const getStageColor = (stage: string) => {
+    switch (stage) {
+      case 'Planning': return { bg: '#FEF3C7', text: '#92400E', border: '#F59E0B' };
+      case 'Field Inspection': return { bg: '#DBEAFE', text: '#1E40AF', border: '#3B82F6' };
+      case 'Annotation': return { bg: '#DDD6FE', text: '#4C1D95', border: '#8B5CF6' };
+      case 'Completed': return { bg: '#D1FAE5', text: '#065F46', border: '#10B981' };
+      default: return { bg: '#F3F4F6', text: '#374151', border: '#9CA3AF' };
+    }
+  };
+
+  const getStageProgress = (stage: string) => {
+    const stages = projectStages;
+    const currentIndex = stages.indexOf(stage);
+    return ((currentIndex + 1) / stages.length) * 100;
+  };
+
+  if (loading) {
+    return (
+      <div style={{ padding: '32px', textAlign: 'center' }}>
+        <div style={{
+          display: 'inline-block',
+          width: '48px',
+          height: '48px',
+          border: '4px solid #DC143C',
+          borderTopColor: 'transparent',
+          borderRadius: '50%',
+          animation: 'spin 1s linear infinite',
+        }}></div>
+        <p style={{ color: '#666', marginTop: '16px' }}>Loading projects...</p>
+      </div>
+    );
+  }
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* HEADER */}
-      <div className="bg-white border-b border-gray-200 px-8 py-6">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-3xl font-bold text-gray-900">Projects</h1>
-            <p className="text-gray-600 mt-1">Manage your facade inspection projects</p>
-          </div>
-          <button
-            onClick={() => setShowCreateModal(true)}
-            className="flex items-center gap-2 bg-blue-900 text-white px-6 py-3 rounded-lg hover:bg-blue-800 transition-all font-semibold shadow-sm"
-          >
-            <Plus size={20} />
-            New Project
-          </button>
+    <div style={{ backgroundColor: '#f9fafb', minHeight: '100vh', padding: '32px' }}>
+      {/* HEADER WITH CREATE BUTTON */}
+      <div style={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        marginBottom: '32px',
+      }}>
+        <div>
+          <h1 style={{ fontSize: '28px', fontWeight: 'bold', color: '#1a1a1a', margin: 0 }}>
+            Projects
+          </h1>
+          <p style={{ fontSize: '14px', color: '#666', margin: '4px 0 0 0' }}>
+            Manage and track all inspection projects
+          </p>
         </div>
 
-        {/* SEARCH & FILTERS */}
-        <div className="mt-6 flex gap-4">
-          <div className="flex-1 flex items-center gap-2 bg-gray-100 px-4 py-3 rounded-lg">
-            <Search size={20} className="text-gray-400" />
-            <input
-              type="text"
-              placeholder="Search projects by name, client, or building..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="bg-transparent outline-none w-full"
-            />
-          </div>
-          <button className="flex items-center gap-2 bg-white border border-gray-300 px-4 py-3 rounded-lg hover:bg-gray-50 transition">
-            <Filter size={20} />
-            Filter
-          </button>
-        </div>
+        <button
+          onClick={() => {
+            resetForm();
+            setShowCreateModal(true);
+          }}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+            padding: '10px 20px',
+            backgroundColor: '#DC143C',
+            color: 'white',
+            border: 'none',
+            borderRadius: '6px',
+            cursor: 'pointer',
+            fontWeight: '600',
+            fontSize: '14px',
+            transition: 'all 0.3s',
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.backgroundColor = '#B91C3C';
+            e.currentTarget.style.transform = 'translateY(-2px)';
+            e.currentTarget.style.boxShadow = '0 4px 12px rgba(220, 20, 60, 0.3)';
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.backgroundColor = '#DC143C';
+            e.currentTarget.style.transform = 'translateY(0)';
+            e.currentTarget.style.boxShadow = 'none';
+          }}
+        >
+          <Plus size={18} />
+          Create New Project
+        </button>
       </div>
 
       {/* PROJECTS GRID */}
-      <div className="p-8">
-        {loading ? (
-          <div className="text-center py-16">
-            <div className="inline-block animate-spin w-12 h-12 border-4 border-blue-600 border-t-transparent rounded-full"></div>
-            <p className="text-gray-600 mt-4">Loading projects...</p>
-          </div>
-        ) : filteredProjects.length === 0 ? (
-          <div className="text-center py-16">
-            <div className="w-24 h-24 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
-              <Folder size={48} className="text-gray-400" />
-            </div>
-            <h3 className="text-xl font-bold text-gray-900 mb-2">
-              {searchQuery ? 'No projects found' : 'No projects yet'}
-            </h3>
-            <p className="text-gray-600 mb-6">
-              {searchQuery
-                ? 'Try adjusting your search criteria'
-                : 'Create your first project to get started'}
-            </p>
-            {!searchQuery && (
-              <button
-                onClick={() => setShowCreateModal(true)}
-                className="bg-blue-900 text-white px-6 py-3 rounded-lg hover:bg-blue-800 transition font-semibold"
-              >
-                Create Project
-              </button>
-            )}
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {filteredProjects.map((project: any) => (
+      {projects.length === 0 ? (
+        <div style={{
+          textAlign: 'center',
+          padding: '64px 32px',
+          backgroundColor: 'white',
+          borderRadius: '8px',
+          border: '1px solid #e5e7eb',
+        }}>
+          <p style={{ fontSize: '16px', color: '#666', marginBottom: '16px' }}>
+            No projects yet. Create your first project to get started.
+          </p>
+          <button
+            onClick={() => {
+              resetForm();
+              setShowCreateModal(true);
+            }}
+            style={{
+              padding: '10px 20px',
+              backgroundColor: '#DC143C',
+              color: 'white',
+              border: 'none',
+              borderRadius: '6px',
+              cursor: 'pointer',
+              fontWeight: '600',
+              transition: 'all 0.3s',
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.backgroundColor = '#B91C3C';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.backgroundColor = '#DC143C';
+            }}
+          >
+            + Create First Project
+          </button>
+        </div>
+      ) : (
+        <div style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fill, minmax(350px, 1fr))',
+          gap: '24px',
+        }}>
+          {projects.map((project) => {
+            const stageColor = getStageColor(project.currentStage || 'Planning');
+            const stageProgress = getStageProgress(project.currentStage || 'Planning');
+
+            return (
               <div
                 key={project.id}
-                className="bg-white rounded-xl shadow-sm border border-gray-200 hover:shadow-lg transition-all cursor-pointer overflow-hidden"
+                style={{
+                  backgroundColor: 'white',
+                  border: '1px solid #e5e7eb',
+                  borderRadius: '8px',
+                  padding: '20px',
+                  transition: 'all 0.3s',
+                  boxShadow: '0 1px 3px rgba(0, 0, 0, 0.1)',
+                  cursor: 'pointer',
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.boxShadow = '0 10px 25px rgba(0, 0, 0, 0.1)';
+                  e.currentTarget.style.transform = 'translateY(-4px)';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.boxShadow = '0 1px 3px rgba(0, 0, 0, 0.1)';
+                  e.currentTarget.style.transform = 'translateY(0)';
+                }}
               >
                 {/* PROJECT HEADER */}
-                <div className="bg-gradient-to-r from-blue-900 to-blue-800 p-6 text-white">
-                  <div className="flex items-start justify-between">
-                    <div className="flex-1">
-                      <h3 className="font-bold text-xl mb-2">{project.name}</h3>
-                      <p className="text-blue-100 text-sm line-clamp-2">
-                        {project.description || 'No description'}
-                      </p>
-                    </div>
-                    <button className="p-2 hover:bg-blue-700 rounded-lg transition">
-                      <MoreVertical size={20} />
-                    </button>
+                <div style={{ marginBottom: '16px' }}>
+                  <h3 style={{
+                    fontSize: '18px',
+                    fontWeight: '700',
+                    color: '#1a1a1a',
+                    margin: '0 0 4px 0',
+                  }}>
+                    {project.name}
+                  </h3>
+                  <p style={{
+                    fontSize: '13px',
+                    color: '#666',
+                    margin: 0,
+                  }}>
+                    {project.buildingName}
+                  </p>
+                </div>
+
+                {/* PROJECT INFO */}
+                <div style={{
+                  fontSize: '13px',
+                  color: '#666',
+                  marginBottom: '16px',
+                  lineHeight: '1.6',
+                }}>
+                  <div>
+                    <span style={{ fontWeight: '600', color: '#1a1a1a' }}>Client:</span> {project.clientName}
+                  </div>
+                  <div>
+                    <span style={{ fontWeight: '600', color: '#1a1a1a' }}>Job Number:</span> {project.jobNumber || 'N/A'}
+                  </div>
+                  <div>
+                    <span style={{ fontWeight: '600', color: '#1a1a1a' }}>Facade Type:</span> {project.facadeType || 'N/A'}
                   </div>
                 </div>
 
-                {/* PROJECT DETAILS */}
-                <div className="p-6 space-y-3">
-                  <div className="flex items-center gap-3 text-sm">
-                    <MapPin size={16} className="text-gray-400" />
-                    <span className="text-gray-900 font-medium">
-                      {project.buildingName || 'No building name'}
+                {/* STAGE PROGRESS */}
+                <div style={{ marginBottom: '16px' }}>
+                  <div style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    marginBottom: '8px',
+                  }}>
+                    <span style={{
+                      fontSize: '12px',
+                      fontWeight: '600',
+                      color: '#666',
+                    }}>
+                      PROJECT STAGE
+                    </span>
+                    <span style={{
+                      fontSize: '12px',
+                      fontWeight: '600',
+                      color: stageColor.text,
+                      backgroundColor: stageColor.bg,
+                      padding: '4px 8px',
+                      borderRadius: '4px',
+                      border: `1px solid ${stageColor.border}`,
+                    }}>
+                      {project.currentStage || 'Planning'}
                     </span>
                   </div>
 
-                  <div className="flex items-center gap-3 text-sm">
-                    <User size={16} className="text-gray-400" />
-                    <span className="text-gray-600">
-                      {project.clientName || 'No client'}
-                    </span>
+                  {/* PROGRESS BAR */}
+                  <div style={{
+                    width: '100%',
+                    height: '6px',
+                    backgroundColor: '#e5e7eb',
+                    borderRadius: '3px',
+                    overflow: 'hidden',
+                  }}>
+                    <div style={{
+                      width: `${stageProgress}%`,
+                      height: '100%',
+                      backgroundColor: '#DC143C',
+                      transition: 'width 0.3s',
+                    }}></div>
                   </div>
 
-                  <div className="flex items-center gap-3 text-sm">
-                    <Folder size={16} className="text-gray-400" />
-                    <span className="text-gray-600">
-                      Job #{project.jobNumber || 'N/A'}
-                    </span>
-                  </div>
-
-                  <div className="flex items-center gap-3 text-sm">
-                    <Calendar size={16} className="text-gray-400" />
-                    <span className="text-gray-600">
-                      {project.facadeType || 'No facade type'}
-                    </span>
+                  {/* STAGE INDICATORS */}
+                  <div style={{
+                    display: 'grid',
+                    gridTemplateColumns: 'repeat(4, 1fr)',
+                    gap: '8px',
+                    marginTop: '12px',
+                  }}>
+                    {projectStages.map((stage) => {
+                      const isActive = projectStages.indexOf(stage) <= projectStages.indexOf(project.currentStage || 'Planning');
+                      return (
+                        <div
+                          key={stage}
+                          style={{
+                            fontSize: '10px',
+                            fontWeight: '600',
+                            textAlign: 'center',
+                            padding: '4px',
+                            backgroundColor: isActive ? '#DC143C' : '#f3f4f6',
+                            color: isActive ? 'white' : '#999',
+                            borderRadius: '3px',
+                            transition: 'all 0.3s',
+                          }}
+                        >
+                          {stage.split(' ')[0]}
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
 
                 {/* ACTIONS */}
-                <div className="border-t border-gray-200 p-4 bg-gray-50 flex gap-2">
-                  <button 
-  onClick={() => navigate(`/projects/${project.id}`)}
-  className="flex-1 flex items-center justify-center gap-2 bg-white border border-gray-300 px-4 py-2 rounded-lg hover:bg-gray-100 transition text-sm font-semibold"
->
-  <Eye size={16} />
-  View
-</button>
-                  <button className="flex items-center justify-center gap-2 bg-white border border-gray-300 px-4 py-2 rounded-lg hover:bg-gray-100 transition">
-                    <Edit size={16} />
+                <div style={{
+                  display: 'grid',
+                  gridTemplateColumns: '1fr 1fr 1fr',
+                  gap: '8px',
+                  borderTop: '1px solid #e5e7eb',
+                  paddingTop: '16px',
+                }}>
+                  <button
+                    onClick={() => navigate(`/projects/${project.id}`)}
+                    style={{
+                      padding: '8px 12px',
+                      backgroundColor: '#DC143C',
+                      color: 'white',
+                      border: 'none',
+                      borderRadius: '4px',
+                      cursor: 'pointer',
+                      fontWeight: '600',
+                      fontSize: '12px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: '4px',
+                      transition: 'all 0.3s',
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.backgroundColor = '#B91C3C';
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.backgroundColor = '#DC143C';
+                    }}
+                  >
+                    <Eye size={14} />
+                    View
                   </button>
-                  <button className="flex items-center justify-center gap-2 bg-white border border-red-300 text-red-600 px-4 py-2 rounded-lg hover:bg-red-50 transition">
-                    <Trash2 size={16} />
+
+                  <button
+                    onClick={() => handleEditProject(project)}
+                    style={{
+                      padding: '8px 12px',
+                      backgroundColor: '#3B82F6',
+                      color: 'white',
+                      border: 'none',
+                      borderRadius: '4px',
+                      cursor: 'pointer',
+                      fontWeight: '600',
+                      fontSize: '12px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: '4px',
+                      transition: 'all 0.3s',
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.backgroundColor = '#2563EB';
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.backgroundColor = '#3B82F6';
+                    }}
+                  >
+                    <Edit2 size={14} />
+                    Edit
+                  </button>
+
+                  <button
+                    onClick={() => handleDeleteProject(project.id)}
+                    style={{
+                      padding: '8px 12px',
+                      backgroundColor: '#EF4444',
+                      color: 'white',
+                      border: 'none',
+                      borderRadius: '4px',
+                      cursor: 'pointer',
+                      fontWeight: '600',
+                      fontSize: '12px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: '4px',
+                      transition: 'all 0.3s',
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.backgroundColor = '#DC2626';
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.backgroundColor = '#EF4444';
+                    }}
+                  >
+                    <Trash2 size={14} />
+                    Delete
                   </button>
                 </div>
               </div>
-            ))}
-          </div>
-        )}
-      </div>
+            );
+          })}
+        </div>
+      )}
 
       {/* CREATE PROJECT MODAL */}
       {showCreateModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
-            <div className="p-6 border-b border-gray-200">
-              <h2 className="text-2xl font-bold text-gray-900">Create New Project</h2>
-              <p className="text-gray-600 mt-1">Fill in the project details below</p>
+        <div style={{
+          position: 'fixed',
+          inset: 0,
+          backgroundColor: 'rgba(0, 0, 0, 0.5)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 50,
+        }}>
+          <div style={{
+            backgroundColor: 'white',
+            borderRadius: '8px',
+            padding: '32px',
+            maxWidth: '500px',
+            width: '90%',
+            maxHeight: '90vh',
+            overflowY: 'auto',
+          }}>
+            <h2 style={{
+              fontSize: '22px',
+              fontWeight: 'bold',
+              color: '#1a1a1a',
+              marginBottom: '24px',
+              margin: '0 0 24px 0',
+            }}>
+              Create New Project
+            </h2>
+
+            {/* PROJECT NAME */}
+            <div style={{ marginBottom: '16px' }}>
+              <label style={{
+                display: 'block',
+                fontSize: '13px',
+                fontWeight: '600',
+                color: '#1a1a1a',
+                marginBottom: '6px',
+              }}>
+                Project Name *
+              </label>
+              <input
+                type="text"
+                value={formData.name}
+                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                placeholder="e.g., Burj Khalifa Tower"
+                style={{
+                  width: '100%',
+                  padding: '10px 12px',
+                  border: '1px solid #d1d5db',
+                  borderRadius: '6px',
+                  fontSize: '14px',
+                  boxSizing: 'border-box',
+                }}
+              />
             </div>
 
-            <form onSubmit={handleCreateProject} className="p-6 space-y-4">
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">
-                  Project Name *
-                </label>
-                <input
-                  type="text"
-                  value={newProject.name}
-                  onChange={(e) => setNewProject({ ...newProject, name: e.target.value })}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  placeholder="e.g., Dubai Marina Tower Inspection"
-                  required
-                />
-              </div>
+            {/* BUILDING NAME */}
+            <div style={{ marginBottom: '16px' }}>
+              <label style={{
+                display: 'block',
+                fontSize: '13px',
+                fontWeight: '600',
+                color: '#1a1a1a',
+                marginBottom: '6px',
+              }}>
+                Building Name *
+              </label>
+              <input
+                type="text"
+                value={formData.buildingName}
+                onChange={(e) => setFormData({ ...formData, buildingName: e.target.value })}
+                placeholder="e.g., Burj Khalifa"
+                style={{
+                  width: '100%',
+                  padding: '10px 12px',
+                  border: '1px solid #d1d5db',
+                  borderRadius: '6px',
+                  fontSize: '14px',
+                  boxSizing: 'border-box',
+                }}
+              />
+            </div>
 
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">
-                  Description
-                </label>
-                <textarea
-                  value={newProject.description}
-                  onChange={(e) => setNewProject({ ...newProject, description: e.target.value })}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  placeholder="Brief description of the project"
-                  rows={3}
-                />
-              </div>
+            {/* CLIENT NAME */}
+            <div style={{ marginBottom: '16px' }}>
+              <label style={{
+                display: 'block',
+                fontSize: '13px',
+                fontWeight: '600',
+                color: '#1a1a1a',
+                marginBottom: '6px',
+              }}>
+                Client Name *
+              </label>
+              <input
+                type="text"
+                value={formData.clientName}
+                onChange={(e) => setFormData({ ...formData, clientName: e.target.value })}
+                placeholder="e.g., Emaar Properties"
+                style={{
+                  width: '100%',
+                  padding: '10px 12px',
+                  border: '1px solid #d1d5db',
+                  borderRadius: '6px',
+                  fontSize: '14px',
+                  boxSizing: 'border-box',
+                }}
+              />
+            </div>
 
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">
-                    Building Name *
-                  </label>
-                  <input
-                    type="text"
-                    value={newProject.buildingName}
-                    onChange={(e) => setNewProject({ ...newProject, buildingName: e.target.value })}
-                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    placeholder="e.g., Marina Heights"
-                    required
-                  />
-                </div>
+            {/* JOB NUMBER */}
+            <div style={{ marginBottom: '16px' }}>
+              <label style={{
+                display: 'block',
+                fontSize: '13px',
+                fontWeight: '600',
+                color: '#1a1a1a',
+                marginBottom: '6px',
+              }}>
+                Job Number
+              </label>
+              <input
+                type="text"
+                value={formData.jobNumber}
+                onChange={(e) => setFormData({ ...formData, jobNumber: e.target.value })}
+                placeholder="e.g., JN-2026-001"
+                style={{
+                  width: '100%',
+                  padding: '10px 12px',
+                  border: '1px solid #d1d5db',
+                  borderRadius: '6px',
+                  fontSize: '14px',
+                  boxSizing: 'border-box',
+                }}
+              />
+            </div>
 
-                <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">
-                    Client Name *
-                  </label>
-                  <input
-                    type="text"
-                    value={newProject.clientName}
-                    onChange={(e) => setNewProject({ ...newProject, clientName: e.target.value })}
-                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    placeholder="e.g., Emaar Properties"
-                    required
-                  />
-                </div>
-              </div>
+            {/* FACADE TYPE */}
+            <div style={{ marginBottom: '16px' }}>
+              <label style={{
+                display: 'block',
+                fontSize: '13px',
+                fontWeight: '600',
+                color: '#1a1a1a',
+                marginBottom: '6px',
+              }}>
+                Facade Type
+              </label>
+              <select
+                value={formData.facadeType}
+                onChange={(e) => setFormData({ ...formData, facadeType: e.target.value })}
+                style={{
+                  width: '100%',
+                  padding: '10px 12px',
+                  border: '1px solid #d1d5db',
+                  borderRadius: '6px',
+                  fontSize: '14px',
+                  cursor: 'pointer',
+                  boxSizing: 'border-box',
+                }}
+              >
+                <option value="Curtain Wall">Curtain Wall</option>
+                <option value="Masonry">Masonry</option>
+                <option value="Precast">Precast Concrete</option>
+                <option value="Stone">Natural Stone</option>
+                <option value="Glass">Glass Panel</option>
+                <option value="Metal">Metal Composite</option>
+              </select>
+            </div>
 
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">
-                    Job Number
-                  </label>
-                  <input
-                    type="text"
-                    value={newProject.jobNumber}
-                    onChange={(e) => setNewProject({ ...newProject, jobNumber: e.target.value })}
-                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    placeholder="e.g., JOB-2024-001"
-                  />
-                </div>
+            {/* STARTING STAGE */}
+            <div style={{ marginBottom: '16px' }}>
+              <label style={{
+                display: 'block',
+                fontSize: '13px',
+                fontWeight: '600',
+                color: '#1a1a1a',
+                marginBottom: '6px',
+              }}>
+                Initial Project Stage
+              </label>
+              <select
+                value={formData.currentStage}
+                onChange={(e) => setFormData({ ...formData, currentStage: e.target.value })}
+                style={{
+                  width: '100%',
+                  padding: '10px 12px',
+                  border: '1px solid #d1d5db',
+                  borderRadius: '6px',
+                  fontSize: '14px',
+                  cursor: 'pointer',
+                  boxSizing: 'border-box',
+                }}
+              >
+                {projectStages.map((stage) => (
+                  <option key={stage} value={stage}>{stage}</option>
+                ))}
+              </select>
+              <p style={{
+                fontSize: '12px',
+                color: '#666',
+                marginTop: '6px',
+                margin: '6px 0 0 0',
+              }}>
+                Project progression: Planning → Field Inspection → Annotation → Completed
+              </p>
+            </div>
 
-                <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">
-                    Facade Type
-                  </label>
-                  <select
-                    value={newProject.facadeType}
-                    onChange={(e) => setNewProject({ ...newProject, facadeType: e.target.value })}
-                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  >
-                    <option value="">Select type</option>
-                    <option value="Glass Curtain Wall">Glass Curtain Wall</option>
-                    <option value="Stone Cladding">Stone Cladding</option>
-                    <option value="Metal Panels">Metal Panels</option>
-                    <option value="Concrete">Concrete</option>
-                    <option value="Mixed">Mixed</option>
-                  </select>
-                </div>
-              </div>
+            {/* DESCRIPTION */}
+            <div style={{ marginBottom: '24px' }}>
+              <label style={{
+                display: 'block',
+                fontSize: '13px',
+                fontWeight: '600',
+                color: '#1a1a1a',
+                marginBottom: '6px',
+              }}>
+                Description
+              </label>
+              <textarea
+                value={formData.description}
+                onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                placeholder="Add project notes..."
+                style={{
+                  width: '100%',
+                  padding: '10px 12px',
+                  border: '1px solid #d1d5db',
+                  borderRadius: '6px',
+                  fontSize: '14px',
+                  minHeight: '100px',
+                  resize: 'vertical',
+                  fontFamily: 'inherit',
+                  boxSizing: 'border-box',
+                }}
+              />
+            </div>
 
-              <div className="flex gap-3 pt-4">
-                <button
-                  type="button"
-                  onClick={() => setShowCreateModal(false)}
-                  className="flex-1 px-6 py-3 border border-gray-300 rounded-lg hover:bg-gray-50 transition font-semibold"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="flex-1 px-6 py-3 bg-blue-900 text-white rounded-lg hover:bg-blue-800 transition font-semibold"
-                >
-                  Create Project
-                </button>
-              </div>
-            </form>
+            {/* BUTTONS */}
+            <div style={{
+              display: 'flex',
+              gap: '12px',
+            }}>
+              <button
+                onClick={() => {
+                  setShowCreateModal(false);
+                  resetForm();
+                }}
+                style={{
+                  flex: 1,
+                  padding: '10px 16px',
+                  backgroundColor: '#f3f4f6',
+                  color: '#1a1a1a',
+                  border: '1px solid #d1d5db',
+                  borderRadius: '6px',
+                  cursor: 'pointer',
+                  fontWeight: '600',
+                  fontSize: '14px',
+                  transition: 'all 0.3s',
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.backgroundColor = '#e5e7eb';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.backgroundColor = '#f3f4f6';
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleCreateProject}
+                style={{
+                  flex: 1,
+                  padding: '10px 16px',
+                  backgroundColor: '#DC143C',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '6px',
+                  cursor: 'pointer',
+                  fontWeight: '600',
+                  fontSize: '14px',
+                  transition: 'all 0.3s',
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.backgroundColor = '#B91C3C';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.backgroundColor = '#DC143C';
+                }}
+              >
+                Create Project
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* EDIT PROJECT MODAL */}
+      {showEditModal && (
+        <div style={{
+          position: 'fixed',
+          inset: 0,
+          backgroundColor: 'rgba(0, 0, 0, 0.5)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 50,
+        }}>
+          <div style={{
+            backgroundColor: 'white',
+            borderRadius: '8px',
+            padding: '32px',
+            maxWidth: '500px',
+            width: '90%',
+            maxHeight: '90vh',
+            overflowY: 'auto',
+          }}>
+            <h2 style={{
+              fontSize: '22px',
+              fontWeight: 'bold',
+              color: '#1a1a1a',
+              marginBottom: '24px',
+              margin: '0 0 24px 0',
+            }}>
+              Edit Project
+            </h2>
+
+            {/* PROJECT NAME */}
+            <div style={{ marginBottom: '16px' }}>
+              <label style={{
+                display: 'block',
+                fontSize: '13px',
+                fontWeight: '600',
+                color: '#1a1a1a',
+                marginBottom: '6px',
+              }}>
+                Project Name *
+              </label>
+              <input
+                type="text"
+                value={formData.name}
+                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                style={{
+                  width: '100%',
+                  padding: '10px 12px',
+                  border: '1px solid #d1d5db',
+                  borderRadius: '6px',
+                  fontSize: '14px',
+                  boxSizing: 'border-box',
+                }}
+              />
+            </div>
+
+            {/* BUILDING NAME */}
+            <div style={{ marginBottom: '16px' }}>
+              <label style={{
+                display: 'block',
+                fontSize: '13px',
+                fontWeight: '600',
+                color: '#1a1a1a',
+                marginBottom: '6px',
+              }}>
+                Building Name *
+              </label>
+              <input
+                type="text"
+                value={formData.buildingName}
+                onChange={(e) => setFormData({ ...formData, buildingName: e.target.value })}
+                style={{
+                  width: '100%',
+                  padding: '10px 12px',
+                  border: '1px solid #d1d5db',
+                  borderRadius: '6px',
+                  fontSize: '14px',
+                  boxSizing: 'border-box',
+                }}
+              />
+            </div>
+
+            {/* CLIENT NAME */}
+            <div style={{ marginBottom: '16px' }}>
+              <label style={{
+                display: 'block',
+                fontSize: '13px',
+                fontWeight: '600',
+                color: '#1a1a1a',
+                marginBottom: '6px',
+              }}>
+                Client Name *
+              </label>
+              <input
+                type="text"
+                value={formData.clientName}
+                onChange={(e) => setFormData({ ...formData, clientName: e.target.value })}
+                style={{
+                  width: '100%',
+                  padding: '10px 12px',
+                  border: '1px solid #d1d5db',
+                  borderRadius: '6px',
+                  fontSize: '14px',
+                  boxSizing: 'border-box',
+                }}
+              />
+            </div>
+
+            {/* JOB NUMBER */}
+            <div style={{ marginBottom: '16px' }}>
+              <label style={{
+                display: 'block',
+                fontSize: '13px',
+                fontWeight: '600',
+                color: '#1a1a1a',
+                marginBottom: '6px',
+              }}>
+                Job Number
+              </label>
+              <input
+                type="text"
+                value={formData.jobNumber}
+                onChange={(e) => setFormData({ ...formData, jobNumber: e.target.value })}
+                style={{
+                  width: '100%',
+                  padding: '10px 12px',
+                  border: '1px solid #d1d5db',
+                  borderRadius: '6px',
+                  fontSize: '14px',
+                  boxSizing: 'border-box',
+                }}
+              />
+            </div>
+
+            {/* FACADE TYPE */}
+            <div style={{ marginBottom: '16px' }}>
+              <label style={{
+                display: 'block',
+                fontSize: '13px',
+                fontWeight: '600',
+                color: '#1a1a1a',
+                marginBottom: '6px',
+              }}>
+                Facade Type
+              </label>
+              <select
+                value={formData.facadeType}
+                onChange={(e) => setFormData({ ...formData, facadeType: e.target.value })}
+                style={{
+                  width: '100%',
+                  padding: '10px 12px',
+                  border: '1px solid #d1d5db',
+                  borderRadius: '6px',
+                  fontSize: '14px',
+                  cursor: 'pointer',
+                  boxSizing: 'border-box',
+                }}
+              >
+                <option value="Curtain Wall">Curtain Wall</option>
+                <option value="Masonry">Masonry</option>
+                <option value="Precast">Precast Concrete</option>
+                <option value="Stone">Natural Stone</option>
+                <option value="Glass">Glass Panel</option>
+                <option value="Metal">Metal Composite</option>
+              </select>
+            </div>
+
+            {/* CURRENT STAGE */}
+            <div style={{ marginBottom: '16px' }}>
+              <label style={{
+                display: 'block',
+                fontSize: '13px',
+                fontWeight: '600',
+                color: '#1a1a1a',
+                marginBottom: '6px',
+              }}>
+                Project Stage
+              </label>
+              <select
+                value={formData.currentStage}
+                onChange={(e) => setFormData({ ...formData, currentStage: e.target.value })}
+                style={{
+                  width: '100%',
+                  padding: '10px 12px',
+                  border: '1px solid #d1d5db',
+                  borderRadius: '6px',
+                  fontSize: '14px',
+                  cursor: 'pointer',
+                  boxSizing: 'border-box',
+                }}
+              >
+                {projectStages.map((stage) => (
+                  <option key={stage} value={stage}>{stage}</option>
+                ))}
+              </select>
+            </div>
+
+            {/* DESCRIPTION */}
+            <div style={{ marginBottom: '24px' }}>
+              <label style={{
+                display: 'block',
+                fontSize: '13px',
+                fontWeight: '600',
+                color: '#1a1a1a',
+                marginBottom: '6px',
+              }}>
+                Description
+              </label>
+              <textarea
+                value={formData.description}
+                onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                style={{
+                  width: '100%',
+                  padding: '10px 12px',
+                  border: '1px solid #d1d5db',
+                  borderRadius: '6px',
+                  fontSize: '14px',
+                  minHeight: '100px',
+                  resize: 'vertical',
+                  fontFamily: 'inherit',
+                  boxSizing: 'border-box',
+                }}
+              />
+            </div>
+
+            {/* BUTTONS */}
+            <div style={{
+              display: 'flex',
+              gap: '12px',
+            }}>
+              <button
+                onClick={() => {
+                  setShowEditModal(false);
+                  setEditingProject(null);
+                  resetForm();
+                }}
+                style={{
+                  flex: 1,
+                  padding: '10px 16px',
+                  backgroundColor: '#f3f4f6',
+                  color: '#1a1a1a',
+                  border: '1px solid #d1d5db',
+                  borderRadius: '6px',
+                  cursor: 'pointer',
+                  fontWeight: '600',
+                  fontSize: '14px',
+                  transition: 'all 0.3s',
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.backgroundColor = '#e5e7eb';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.backgroundColor = '#f3f4f6';
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleUpdateProject}
+                style={{
+                  flex: 1,
+                  padding: '10px 16px',
+                  backgroundColor: '#DC143C',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '6px',
+                  cursor: 'pointer',
+                  fontWeight: '600',
+                  fontSize: '14px',
+                  transition: 'all 0.3s',
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.backgroundColor = '#B91C3C';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.backgroundColor = '#DC143C';
+                }}
+              >
+                Update Project
+              </button>
+            </div>
           </div>
         </div>
       )}

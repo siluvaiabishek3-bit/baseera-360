@@ -4,42 +4,48 @@
       "id": "1",
       "email": "test@baseera.ae",
       "password": "password123",
-      "role": "ENGINEER",
-      "firstName": "Test",
-      "lastName": "User"
+      "role": "ENGINEER"
     }
   ],
   "projects": [
     {
       "id": "1",
-      "name": "Sample Project",
-      "description": "Test project",
-      "buildingName": "Test Building",
-      "clientName": "Test Client",
-      "createdBy": "1"
-    },
-    {
-      "name": "Glass Room Metal",
-      "description": "Facade Inspection",
-      "buildingName": "Rolex Tower",
-      "clientName": "Seddiqi",
-      "jobNumber": "001",
+      "name": "Burj Khalifa Facade Inspection",
+      "description": "Comprehensive drone-based facade inspection of Burj Khalifa",
+      "buildingName": "Burj Khalifa",
+      "clientName": "Emaar Properties",
+      "jobNumber": "JOB-2024-001",
       "facadeType": "Glass Curtain Wall",
-      "createdBy": "1",
-      "id": "C12Fd1aAL1E"
+      "status": "In Progress",
+      "createdAt": "2024-01-15",
+      "updatedAt": "2024-01-15"
     },
     {
-      "name": "GISDrones",
-      "description": "Building Facade Inspection",
-      "buildingName": "The View Al Barsha",
-      "clientName": "Sheraton",
-      "jobNumber": "002",
-      "facadeType": "Stone Cladding",
-      "createdBy": "1",
-      "id": "USkURktrwnc"
+      "id": "2",
+      "name": "Downtown Tower Complex",
+      "description": "Multi-phase inspection of downtown commercial towers",
+      "buildingName": "Downtown Tower A",
+      "clientName": "Downtown Development LLC",
+      "jobNumber": "JOB-2024-002",
+      "facadeType": "Stone Facade",
+      "status": "Completed",
+      "createdAt": "2024-01-10",
+      "updatedAt": "2024-01-20"
+    },
+    {
+      "id": "3",
+      "name": "Marina Residences Inspection",
+      "description": "Residential building facade assessment",
+      "buildingName": "Marina Residences",
+      "clientName": "Marina Real Estate",
+      "jobNumber": "JOB-2024-003",
+      "facadeType": "Mixed Material",
+      "status": "Planning",
+      "createdAt": "2024-01-12",
+      "updatedAt": "2024-01-12"
     }
   ],
   "media": [],
   "annotations": [],
-  "$schema": "./node_modules/json-server/schema.json"
+  "cadfiles": []
 }

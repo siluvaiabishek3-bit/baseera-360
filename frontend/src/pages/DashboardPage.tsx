@@ -1,200 +1,425 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Folder, MapPin, BarChart3 } from 'lucide-react';
+import { BarChart, Bar, LineChart, Line, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
+import { TrendingUp, Users, FileText, AlertCircle, CheckCircle, Clock } from 'lucide-react';
+import { mockAPI } from '@/services/mockDataService';
 
 export function DashboardPage() {
   const navigate = useNavigate();
-  const [projects, setProjects] = useState([]);
+  const [projects, setProjects] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [user, setUser] = useState<any>(null);
 
   useEffect(() => {
-    const userData = localStorage.getItem('user');
-    if (userData) {
-      setUser(JSON.parse(userData));
-    }
-
-    const fetchProjects = async () => {
-      try {
-        const response = await fetch('http://localhost:3000/projects');
-        const data = await response.json();
-        setProjects(data || []);
-      } catch (error) {
-        console.error('Error:', error);
-      } finally {
-        setLoading(false);
-      }
-    };
-
     fetchProjects();
   }, []);
 
+  const fetchProjects = async () => {
+    try {
+      const data = await mockAPI.getProjects();
+      setProjects(data);
+    } catch (error) {
+      console.error('Error:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const stats = {
+    totalProjects: projects.length,
+    activeProjects: projects.filter((p) => p.status === 'In Progress').length,
+    completedProjects: projects.filter((p) => p.status === 'Completed').length,
+    pendingProjects: projects.filter((p) => p.status === 'Planning').length,
+  };
+
+  const chartData = [
+    { name: 'In Progress', value: stats.activeProjects, fill: '#f97316' },
+    { name: 'Completed', value: stats.completedProjects, fill: '#22c55e' },
+    { name: 'Planning', value: stats.pendingProjects, fill: '#6b7280' },
+  ];
+
+  const recentProjects = projects.slice(0, 5);
+
+  const defectDistribution = [
+    { name: 'Cracks', value: 35 },
+    { name: 'Corrosion', value: 25 },
+    { name: 'Spalling', value: 22 },
+    { name: 'Water Ingress', value: 18 },
+  ];
+
+  const timelineData = [
+    { month: 'Jan', projects: 2, defects: 12 },
+    { month: 'Feb', projects: 3, defects: 18 },
+    { month: 'Mar', projects: 5, defects: 24 },
+    { month: 'Apr', projects: 4, defects: 20 },
+    { month: 'May', projects: 6, defects: 31 },
+    { month: 'Jun', projects: 3, defects: 15 },
+  ];
+
+  if (loading) {
+    return (
+      <div className="p-8 text-center">
+        <div className="inline-block animate-spin w-12 h-12 border-4 border-baseera-red border-t-transparent rounded-full"></div>
+        <p className="text-gray-600 mt-4">Loading dashboard...</p>
+      </div>
+    );
+  }
+
   return (
-    <div className="p-8">
-      {/* Header */}
-      <div className="mb-8">
-        <h1 className="text-4xl font-bold text-gray-900 mb-2">
-          Welcome back, {user?.firstName || 'Engineer'}!
-        </h1>
-        <p className="text-gray-600">
-          Here's your facade inspection overview for today.
-        </p>
-      </div>
-
-      {/* STATS CARDS */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-        {/* Card 1 */}
-        <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200 hover:shadow-lg transition-all">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-gray-600 text-sm font-medium">Total Projects</p>
-              <p className="text-3xl font-bold text-gray-900 mt-2">
-                {projects.length}
-              </p>
-              <p className="text-xs text-green-600 mt-1">↑ 12% from last month</p>
-            </div>
-            <div className="w-14 h-14 bg-blue-100 rounded-xl flex items-center justify-center">
-              <Folder size={28} className="text-blue-900" />
-            </div>
-          </div>
-        </div>
-
-        {/* Card 2 */}
-        <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200 hover:shadow-lg transition-all">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-gray-600 text-sm font-medium">Active Inspections</p>
-              <p className="text-3xl font-bold text-gray-900 mt-2">24</p>
-              <p className="text-xs text-green-600 mt-1">↑ 8% this week</p>
-            </div>
-            <div className="w-14 h-14 bg-green-100 rounded-xl flex items-center justify-center">
-              <MapPin size={28} className="text-green-600" />
-            </div>
-          </div>
-        </div>
-
-        {/* Card 3 */}
-        <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200 hover:shadow-lg transition-all">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-gray-600 text-sm font-medium">Defects Found</p>
-              <p className="text-3xl font-bold text-gray-900 mt-2">127</p>
-              <p className="text-xs text-orange-600 mt-1">47 critical</p>
-            </div>
-            <div className="w-14 h-14 bg-orange-100 rounded-xl flex items-center justify-center text-2xl">
-              ⚠️
-            </div>
-          </div>
-        </div>
-
-        {/* Card 4 */}
-        <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200 hover:shadow-lg transition-all">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-gray-600 text-sm font-medium">Completion Rate</p>
-              <p className="text-3xl font-bold text-gray-900 mt-2">87%</p>
-              <p className="text-xs text-green-600 mt-1">↑ 5% improvement</p>
-            </div>
-            <div className="w-14 h-14 bg-purple-100 rounded-xl flex items-center justify-center">
-              <BarChart3 size={28} className="text-purple-600" />
-            </div>
-          </div>
+    <div style={{ backgroundColor: '#f5f5f5', minHeight: '100vh' }}>
+      {/* HEADER */}
+      <div className="bg-white border-b border-baseera-red p-8">
+        <div>
+          <h1 className="text-3xl font-bold text-gray-900">Dashboard</h1>
+          <p className="text-gray-600 mt-2">Welcome to BASEERA 360 Inspection Portal</p>
         </div>
       </div>
 
-      {/* PROJECTS TABLE */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-        <div className="p-6 border-b border-gray-200 flex items-center justify-between bg-gradient-to-r from-gray-50 to-white">
-          <div>
-            <h2 className="text-2xl font-bold text-gray-900">Recent Projects</h2>
-            <p className="text-sm text-gray-600 mt-1">
-              Manage your facade inspection projects
-            </p>
-          </div>
-          <button 
+      {/* MAIN CONTENT */}
+      <div className="p-8">
+        {/* TOP STATS */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+          {/* Total Projects */}
+          <div
+            style={{
+              backgroundColor: 'white',
+              borderRadius: '12px',
+              boxShadow: '0 4px 6px rgba(0,0,0,0.07)',
+              border: '1px solid #e5e5e5',
+              padding: '24px',
+              cursor: 'pointer',
+              transition: 'all 0.3s',
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.boxShadow = '0 12px 16px rgba(0,0,0,0.1)';
+              e.currentTarget.style.transform = 'translateY(-2px)';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.boxShadow = '0 4px 6px rgba(0,0,0,0.07)';
+              e.currentTarget.style.transform = 'translateY(0)';
+            }}
             onClick={() => navigate('/projects')}
-            className="flex items-center gap-2 bg-blue-900 text-white px-6 py-3 rounded-lg hover:bg-blue-800 transition-all font-semibold shadow-sm hover:shadow-md"
           >
-            <Plus size={20} />
-            New Project
-          </button>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <div>
+                <p style={{ fontSize: '12px', color: '#666', fontWeight: '600', marginBottom: '8px' }}>
+                  TOTAL PROJECTS
+                </p>
+                <p style={{ fontSize: '32px', fontWeight: 'bold', color: '#1a1a1a' }}>
+                  {stats.totalProjects}
+                </p>
+              </div>
+              <div
+                style={{
+                  width: '60px',
+                  height: '60px',
+                  backgroundImage: 'linear-gradient(135deg, #DC143C 0%, #FF4444 100%)',
+                  borderRadius: '12px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}
+              >
+                <FileText size={28} color="white" />
+              </div>
+            </div>
+          </div>
+
+          {/* Active Projects */}
+          <div
+            style={{
+              backgroundColor: 'white',
+              borderRadius: '12px',
+              boxShadow: '0 4px 6px rgba(0,0,0,0.07)',
+              border: '1px solid #e5e5e5',
+              padding: '24px',
+              cursor: 'pointer',
+              transition: 'all 0.3s',
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.boxShadow = '0 12px 16px rgba(0,0,0,0.1)';
+              e.currentTarget.style.transform = 'translateY(-2px)';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.boxShadow = '0 4px 6px rgba(0,0,0,0.07)';
+              e.currentTarget.style.transform = 'translateY(0)';
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <div>
+                <p style={{ fontSize: '12px', color: '#666', fontWeight: '600', marginBottom: '8px' }}>
+                  IN PROGRESS
+                </p>
+                <p style={{ fontSize: '32px', fontWeight: 'bold', color: '#1a1a1a' }}>
+                  {stats.activeProjects}
+                </p>
+              </div>
+              <div
+                style={{
+                  width: '60px',
+                  height: '60px',
+                  backgroundImage: 'linear-gradient(135deg, #f97316 0%, #ea580c 100%)',
+                  borderRadius: '12px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}
+              >
+                <Clock size={28} color="white" />
+              </div>
+            </div>
+          </div>
+
+          {/* Completed Projects */}
+          <div
+            style={{
+              backgroundColor: 'white',
+              borderRadius: '12px',
+              boxShadow: '0 4px 6px rgba(0,0,0,0.07)',
+              border: '1px solid #e5e5e5',
+              padding: '24px',
+              cursor: 'pointer',
+              transition: 'all 0.3s',
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.boxShadow = '0 12px 16px rgba(0,0,0,0.1)';
+              e.currentTarget.style.transform = 'translateY(-2px)';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.boxShadow = '0 4px 6px rgba(0,0,0,0.07)';
+              e.currentTarget.style.transform = 'translateY(0)';
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <div>
+                <p style={{ fontSize: '12px', color: '#666', fontWeight: '600', marginBottom: '8px' }}>
+                  COMPLETED
+                </p>
+                <p style={{ fontSize: '32px', fontWeight: 'bold', color: '#1a1a1a' }}>
+                  {stats.completedProjects}
+                </p>
+              </div>
+              <div
+                style={{
+                  width: '60px',
+                  height: '60px',
+                  backgroundImage: 'linear-gradient(135deg, #22c55e 0%, #16a34a 100%)',
+                  borderRadius: '12px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}
+              >
+                <CheckCircle size={28} color="white" />
+              </div>
+            </div>
+          </div>
+
+          {/* Planning */}
+          <div
+            style={{
+              backgroundColor: 'white',
+              borderRadius: '12px',
+              boxShadow: '0 4px 6px rgba(0,0,0,0.07)',
+              border: '1px solid #e5e5e5',
+              padding: '24px',
+              cursor: 'pointer',
+              transition: 'all 0.3s',
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.boxShadow = '0 12px 16px rgba(0,0,0,0.1)';
+              e.currentTarget.style.transform = 'translateY(-2px)';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.boxShadow = '0 4px 6px rgba(0,0,0,0.07)';
+              e.currentTarget.style.transform = 'translateY(0)';
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <div>
+                <p style={{ fontSize: '12px', color: '#666', fontWeight: '600', marginBottom: '8px' }}>
+                  PLANNING
+                </p>
+                <p style={{ fontSize: '32px', fontWeight: 'bold', color: '#1a1a1a' }}>
+                  {stats.pendingProjects}
+                </p>
+              </div>
+              <div
+                style={{
+                  width: '60px',
+                  height: '60px',
+                  backgroundImage: 'linear-gradient(135deg, #6b7280 0%, #4b5563 100%)',
+                  borderRadius: '12px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}
+              >
+                <AlertCircle size={28} color="white" />
+              </div>
+            </div>
+          </div>
         </div>
 
-        {loading ? (
-          <div className="p-16 text-center">
-            <div className="inline-block animate-spin w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full"></div>
-            <p className="text-gray-600 mt-4">Loading projects...</p>
+        {/* CHARTS SECTION */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
+          {/* Project Status */}
+          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+            <h3 className="text-lg font-bold text-gray-900 mb-6">Project Status</h3>
+            <ResponsiveContainer width="100%" height={250}>
+              <PieChart>
+                <Pie
+                  data={chartData}
+                  cx="50%"
+                  cy="50%"
+                  labelLine={false}
+                  label={({ name, value }) => `${name}: ${value}`}
+                  outerRadius={80}
+                  fill="#8884d8"
+                  dataKey="value"
+                >
+                  {chartData.map((entry, index) => (
+                    <Cell key={`cell-${index}`} fill={entry.fill} />
+                  ))}
+                </Pie>
+                <Tooltip />
+              </PieChart>
+            </ResponsiveContainer>
           </div>
-        ) : projects.length === 0 ? (
-          <div className="p-16 text-center">
-            <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
-              <Folder size={32} className="text-gray-400" />
+
+          {/* Timeline */}
+          <div className="lg:col-span-2 bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+            <h3 className="text-lg font-bold text-gray-900 mb-6">Projects & Defects Timeline</h3>
+            <ResponsiveContainer width="100%" height={250}>
+              <LineChart data={timelineData}>
+                <CartesianGrid strokeDasharray="3 3" />
+                <XAxis dataKey="month" />
+                <YAxis />
+                <Tooltip />
+                <Legend />
+                <Line type="monotone" dataKey="projects" stroke="#DC143C" strokeWidth={2} name="Projects" />
+                <Line type="monotone" dataKey="defects" stroke="#f97316" strokeWidth={2} name="Defects Found" />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+
+        {/* DEFECT DISTRIBUTION & RECENT PROJECTS */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          {/* Defect Distribution */}
+          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+            <h3 className="text-lg font-bold text-gray-900 mb-6">Defect Distribution</h3>
+            <ResponsiveContainer width="100%" height={300}>
+              <BarChart data={defectDistribution}>
+                <CartesianGrid strokeDasharray="3 3" />
+                <XAxis dataKey="name" />
+                <YAxis />
+                <Tooltip />
+                <Bar dataKey="value" fill="#DC143C" name="Count" />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+
+          {/* Recent Projects */}
+          <div className="lg:col-span-2 bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-lg font-bold text-gray-900">Recent Projects</h3>
+              <button
+                onClick={() => navigate('/projects')}
+                className="text-baseera-red hover:text-baseera-red-dark font-semibold text-sm transition"
+              >
+                View All →
+              </button>
             </div>
-            <p className="text-gray-600 mb-4 text-lg">No projects yet</p>
-            <button 
+
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead>
+                  <tr className="border-b border-gray-200">
+                    <th className="text-left py-3 px-4 font-semibold text-gray-700 text-sm">Project Name</th>
+                    <th className="text-left py-3 px-4 font-semibold text-gray-700 text-sm">Building</th>
+                    <th className="text-left py-3 px-4 font-semibold text-gray-700 text-sm">Client</th>
+                    <th className="text-left py-3 px-4 font-semibold text-gray-700 text-sm">Status</th>
+                    <th className="text-left py-3 px-4 font-semibold text-gray-700 text-sm">Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {recentProjects.map((project) => (
+                    <tr key={project.id} className="border-b border-gray-100 hover:bg-gray-50 transition">
+                      <td className="py-3 px-4 text-sm font-medium text-gray-900">{project.name}</td>
+                      <td className="py-3 px-4 text-sm text-gray-600">{project.buildingName}</td>
+                      <td className="py-3 px-4 text-sm text-gray-600">{project.clientName}</td>
+                      <td className="py-3 px-4 text-sm">
+                        <span
+                          style={{
+                            backgroundColor:
+                              project.status === 'Completed'
+                                ? '#dbeafe'
+                                : project.status === 'In Progress'
+                                ? '#fed7aa'
+                                : '#e5e7eb',
+                            color:
+                              project.status === 'Completed'
+                                ? '#1e40af'
+                                : project.status === 'In Progress'
+                                ? '#b45309'
+                                : '#374151',
+                            padding: '4px 12px',
+                            borderRadius: '6px',
+                            fontWeight: '600',
+                          }}
+                        >
+                          {project.status}
+                        </span>
+                      </td>
+                      <td className="py-3 px-4 text-sm">
+                        <button
+                          onClick={() => navigate(`/projects/${project.id}`)}
+                          className="text-baseera-red hover:text-baseera-red-dark font-semibold transition"
+                        >
+                          View
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        {/* QUICK ACTIONS */}
+        <div className="mt-8 bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+          <h3 className="text-lg font-bold text-gray-900 mb-4">Quick Actions</h3>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            <button
               onClick={() => navigate('/projects')}
-              className="text-blue-900 hover:text-blue-700 font-semibold"
+              className="bg-gradient-to-r from-baseera-black to-baseera-red text-white px-6 py-3 rounded-lg hover:shadow-lg transition font-semibold flex items-center justify-center gap-2"
             >
-              Create your first project →
+              <FileText size={18} />
+              Create Project
+            </button>
+            <button
+              onClick={() => navigate('/projects')}
+              className="border border-gray-300 text-gray-900 px-6 py-3 rounded-lg hover:bg-gray-50 transition font-semibold flex items-center justify-center gap-2"
+            >
+              <Users size={18} />
+              View Projects
+            </button>
+            <button
+              onClick={() => navigate('/analytics')}
+              className="border border-gray-300 text-gray-900 px-6 py-3 rounded-lg hover:bg-gray-50 transition font-semibold flex items-center justify-center gap-2"
+            >
+              <TrendingUp size={18} />
+              Analytics
+            </button>
+            <button
+              onClick={() => navigate('/settings')}
+              className="border border-gray-300 text-gray-900 px-6 py-3 rounded-lg hover:bg-gray-50 transition font-semibold flex items-center justify-center gap-2"
+            >
+              ⚙️ Settings
             </button>
           </div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead>
-                <tr className="border-b border-gray-200 bg-gray-50">
-                  <th className="px-6 py-4 text-left text-sm font-bold text-gray-900">
-                    Project Name
-                  </th>
-                  <th className="px-6 py-4 text-left text-sm font-bold text-gray-900">
-                    Building
-                  </th>
-                  <th className="px-6 py-4 text-left text-sm font-bold text-gray-900">
-                    Client
-                  </th>
-                  <th className="px-6 py-4 text-left text-sm font-bold text-gray-900">
-                    Status
-                  </th>
-                  <th className="px-6 py-4 text-left text-sm font-bold text-gray-900">
-                    Actions
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {projects.map((project: any) => (
-                  <tr
-                    key={project.id}
-                    className="border-b border-gray-100 hover:bg-blue-50 transition-all cursor-pointer"
-                  >
-                    <td className="px-6 py-4">
-                      <p className="font-semibold text-gray-900">{project.name}</p>
-                      <p className="text-xs text-gray-500">{project.description}</p>
-                    </td>
-                    <td className="px-6 py-4 text-sm text-gray-600">
-                      {project.buildingName}
-                    </td>
-                    <td className="px-6 py-4 text-sm text-gray-600">
-                      {project.clientName}
-                    </td>
-                    <td className="px-6 py-4">
-                      <span className="px-3 py-1 bg-green-100 text-green-800 rounded-full text-xs font-semibold">
-                        ● Active
-                      </span>
-                    </td>
-                    <td className="px-6 py-4">
-                      <button 
-                        onClick={() => navigate(`/projects/${project.id}`)}
-                        className="text-blue-900 hover:text-blue-700 font-semibold text-sm"
-                      >
-                        View →
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
+        </div>
       </div>
     </div>
   );
