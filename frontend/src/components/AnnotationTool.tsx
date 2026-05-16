@@ -5,14 +5,15 @@ import { extractThermalData, generateSimulatedThermalData } from '@/services/the
 interface AnnotationToolProps {
   imageType: 'rgb' | 'thermal';
   imageData: string;
+  hasThermalData?: boolean;
   existingAnnotationCount?: number;
   onSave: (annotation: any) => void;
   onCancel: () => void;
 }
-
 export function AnnotationTool({
   imageType,
   imageData,
+  hasThermalData = false,
   existingAnnotationCount = 0,
   onSave,
   onCancel,
@@ -152,15 +153,15 @@ export function AnnotationTool({
 
     if (mode === 'point') {
       setStartPoint({ x, y });
-      // Extract temperature for point
-      if (imageType === 'thermal') {
+      // Extract temperature for point - ONLY if thermal data exists
+      if (imageType === 'thermal' && hasThermalData) {
         setLoadingTemperature(true);
         try {
           const tempData = await extractThermalData(imageData, 'point', { x, y });
           setTemperatureData(tempData);
         } catch (error) {
           console.error('Error extracting temperature:', error);
-          setTemperatureData(generateSimulatedThermalData('point'));
+          setTemperatureData(null);
         } finally {
           setLoadingTemperature(false);
         }
@@ -198,15 +199,15 @@ export function AnnotationTool({
   const handleCanvasMouseUp = async () => {
     if (mode === 'circle' || mode === 'rectangle') {
       setIsDrawing(false);
-      // Extract temperature for polygon
-      if (imageType === 'thermal' && startPoint && points.length > 0) {
+      // Extract temperature for polygon - ONLY if thermal data exists
+      if (imageType === 'thermal' && hasThermalData && startPoint && points.length > 0) {
         setLoadingTemperature(true);
         try {
           const tempData = await extractThermalData(imageData, mode, startPoint, points);
           setTemperatureData(tempData);
         } catch (error) {
           console.error('Error extracting temperature:', error);
-          setTemperatureData(generateSimulatedThermalData('polygon'));
+          setTemperatureData(null);
         } finally {
           setLoadingTemperature(false);
         }
@@ -214,15 +215,15 @@ export function AnnotationTool({
       setShowForm(true);
     } else if (mode === 'freehand') {
       setIsDrawing(false);
-      // Extract temperature for freehand
-      if (imageType === 'thermal' && startPoint && points.length > 1) {
+      // Extract temperature for freehand - ONLY if thermal data exists
+      if (imageType === 'thermal' && hasThermalData && startPoint && points.length > 1) {
         setLoadingTemperature(true);
         try {
-          const tempData = await extractThermalData(imageData, 'freehand', startPoint, points);
+          const tempData = await extractThermalData(imageData, mode, startPoint, points);
           setTemperatureData(tempData);
         } catch (error) {
           console.error('Error extracting temperature:', error);
-          setTemperatureData(generateSimulatedThermalData('polygon'));
+          setTemperatureData(null);
         } finally {
           setLoadingTemperature(false);
         }

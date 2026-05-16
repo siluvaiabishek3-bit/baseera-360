@@ -909,6 +909,7 @@ export function MultiImageViewerPage() {
         <AnnotationTool
           imageType={annotationImageType}
           imageData={annotationImageData}
+          hasThermalData={currentPair?.thermal?.hasRadiometricData || false}
           existingAnnotationCount={getTotalAnnotationCount()}
           onSave={handleSaveAnnotation}
           onCancel={() => {
