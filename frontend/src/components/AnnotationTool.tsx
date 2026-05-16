@@ -552,7 +552,7 @@ export function AnnotationTool({
             <h3 style={{ color: '#fff', fontWeight: 'bold', fontSize: '14px' }}>Annotation #{existingAnnotationCount + 1}</h3>
 
             {/* THERMAL DATA SECTION */}
-            {imageType === 'thermal' && (
+            {imageType === 'thermal' && temperatureData ? (
               <div style={{
                 backgroundColor: '#1a1a1a',
                 border: '1px solid #FF4444',
@@ -568,7 +568,7 @@ export function AnnotationTool({
                     <Loader size={14} style={{ animation: 'spin 1s linear infinite' }} />
                     Extracting temperature...
                   </div>
-                ) : temperatureData ? (
+                ) : (
                   <div style={{ fontSize: '12px', color: '#fff' }}>
                     {mode === 'point' && temperatureData.point !== undefined && (
                       <div style={{ color: '#FF4444', fontWeight: '600', fontSize: '14px' }}>
@@ -605,9 +605,20 @@ export function AnnotationTool({
                       </div>
                     )}
                   </div>
-                ) : null}
+                )}
               </div>
-            )}
+            ) : imageType === 'thermal' ? (
+              <div style={{
+                backgroundColor: '#1a1a1a',
+                border: '1px solid #FF4444',
+                borderRadius: '6px',
+                padding: '12px',
+                color: '#999',
+                fontSize: '12px',
+              }}>
+                ⚠️ No thermal data found in this image
+              </div>
+            ) : null}
 
             {/* DEFECT TYPE */}
             <div>
