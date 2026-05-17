@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import { getNextDefectNumber, resetDefectCounter, drawAnnotationOnCanvas, SEVERITY_COLORS } from '@/services/annotationDrawing';
 import { useNavigate, useParams } from 'react-router-dom';
 import { ArrowLeft, ChevronLeft, ChevronRight, ZoomIn, ZoomOut, AlertCircle } from 'lucide-react';
 import AnnotationTool from '@/components/AnnotationTool';
@@ -35,6 +36,16 @@ export function MultiImageViewerPage() {
   useEffect(() => {
     redrawAllAnnotations();
   }, [annotationsByImage, currentPairIndex, imagePairs]);
+
+useEffect(() => {
+  redrawAllAnnotations();
+}, [annotationsByImage, currentPairIndex, imagePairs, rgbCanvasRef, thermalCanvasRef, zoomCanvasRef]);
+
+useEffect(() => {
+  if (id) {
+    resetDefectCounter(id);
+  }
+}, [id]);
 
   const fetchData = async () => {
     try {
@@ -103,121 +114,197 @@ export function MultiImageViewerPage() {
 };
 
   const redrawAllAnnotations = () => {
-    const currentPair = imagePairs[currentPairIndex];
-    if (!currentPair) return;
+  const currentPair = imagePairs[currentPairIndex];
+  if (!currentPair) return;
 
-    if (currentPair.rgb) {
-      drawAnnotationsOnCanvas(rgbCanvasRef, currentPair.rgb, annotationsByImage[currentPair.rgb.id] || []);
-    }
+  if (currentPair.rgb) {
+    drawAnnotationsOnCanvas(rgbCanvasRef, currentPair.rgb, annotationsByImage[currentPair.rgb.id] || []);
+  }
 
-    if (currentPair.thermal) {
-      drawAnnotationsOnCanvas(thermalCanvasRef, currentPair.thermal, annotationsByImage[currentPair.thermal.id] || []);
-    }
+  if (currentPair.thermal) {
+    drawAnnotationsOnCanvas(thermalCanvasRef, currentPair.thermal, annotationsByImage[currentPair.thermal.id] || []);
+  }
 
-    if (currentPair.zoom) {
-      drawAnnotationsOnCanvas(zoomCanvasRef, currentPair.zoom, annotationsByImage[currentPair.zoom.id] || []);
-    }
-  };
+  if (currentPair.zoom) {
+    drawAnnotationsOnCanvas(zoomCanvasRef, currentPair.zoom, annotationsByImage[currentPair.zoom.id] || []);
+  }
+};
 
   const drawAnnotationsOnCanvas = (canvasRef: React.RefObject<HTMLCanvasElement>, image: any, annotations: any[]) => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
+  const canvas = canvasRef.current;
+  if (!canvas) return;
 
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return;
 
-    const img = new Image();
-    img.onload = () => {
-      canvas.width = img.width;
-      canvas.height = img.height;
+  const img = new Image();
+  img.onload = () => {
+    canvas.width = img.width;
+    canvas.height = img.height;
 
-      ctx.drawImage(img, 0, 0);
+    ctx.drawImage(img, 0, 0);
 
-      annotations.forEach((annotation, idx) => {
-        const color = annotation.severity === 'CRITICAL' ? '#DC143C' : annotation.severity === 'HIGH' ? '#FF4444' : '#f97316';
-        const number = annotation.number || (idx + 1);
+    // Draw each annotation
+    annotations.forEach((annotation) => {
+      console.log('Drawing annotation:', annotation);
+      
+      const color = SEVERITY_COLORS[annotation.severity as keyof typeof SEVERITY_COLORS]?.color || '#999';
+      const number = annotation.globalDefectNumber || annotation.number || '?';
 
-        if (annotation.type === 'point' && annotation.startPoint) {
-          ctx.fillStyle = color;
-          ctx.globalAlpha = 0.9;
-          ctx.beginPath();
-          ctx.arc(annotation.startPoint.x, annotation.startPoint.y, 16, 0, Math.PI * 2);
-          ctx.fill();
-          ctx.globalAlpha = 1;
-          ctx.strokeStyle = 'white';
-          ctx.lineWidth = 2;
-          ctx.stroke();
-
-          ctx.fillStyle = 'white';
-          ctx.font = 'bold 18px Arial';
-          ctx.textAlign = 'center';
-          ctx.textBaseline = 'middle';
-          ctx.fillText(String(number), annotation.startPoint.x, annotation.startPoint.y);
-        } else if (annotation.type === 'circle' && annotation.startPoint && annotation.points.length > 0) {
-          const radius = Math.sqrt(
-            Math.pow(annotation.points[0].x - annotation.startPoint.x, 2) +
-              Math.pow(annotation.points[0].y - annotation.startPoint.y, 2)
-          );
-
-          ctx.fillStyle = color;
-          ctx.globalAlpha = 0.2;
-          ctx.beginPath();
-          ctx.arc(annotation.startPoint.x, annotation.startPoint.y, radius, 0, Math.PI * 2);
-          ctx.fill();
-
-          ctx.strokeStyle = color;
-          ctx.lineWidth = 3;
-          ctx.globalAlpha = 1;
-          ctx.stroke();
-
-          ctx.fillStyle = color;
-          ctx.font = 'bold 18px Arial';
-          ctx.textAlign = 'center';
-          ctx.textBaseline = 'middle';
-          ctx.fillText(String(number), annotation.startPoint.x, annotation.startPoint.y);
-        } else if (annotation.type === 'rectangle' && annotation.startPoint && annotation.points.length > 0) {
-          const width = annotation.points[0].x - annotation.startPoint.x;
-          const height = annotation.points[0].y - annotation.startPoint.y;
-
-          ctx.fillStyle = color;
-          ctx.globalAlpha = 0.2;
-          ctx.fillRect(annotation.startPoint.x, annotation.startPoint.y, width, height);
-
-          ctx.strokeStyle = color;
-          ctx.lineWidth = 3;
-          ctx.globalAlpha = 1;
-          ctx.strokeRect(annotation.startPoint.x, annotation.startPoint.y, width, height);
-
-          ctx.fillStyle = color;
-          ctx.font = 'bold 18px Arial';
-          ctx.textAlign = 'center';
-          ctx.textBaseline = 'middle';
-          ctx.fillText(String(number), annotation.startPoint.x + width / 2, annotation.startPoint.y + height / 2);
-        } else if (annotation.type === 'freehand' && annotation.points.length > 0) {
-          ctx.strokeStyle = color;
-          ctx.lineWidth = 3;
-          ctx.globalAlpha = 0.9;
-          if (annotation.points.length > 1) {
-            ctx.beginPath();
-            ctx.moveTo(annotation.points[0].x, annotation.points[0].y);
-            for (let i = 1; i < annotation.points.length; i++) {
-              ctx.lineTo(annotation.points[i].x, annotation.points[i].y);
-            }
-            ctx.stroke();
-          }
-
-          const lastPoint = annotation.points[annotation.points.length - 1];
-          ctx.globalAlpha = 1;
-          ctx.fillStyle = color;
-          ctx.font = 'bold 18px Arial';
-          ctx.textAlign = 'center';
-          ctx.textBaseline = 'middle';
-          ctx.fillText(String(number), lastPoint.x, lastPoint.y);
+      // Draw polygon
+      if (annotation.type === 'polygon' && annotation.points && annotation.points.length > 0) {
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 3;
+        ctx.globalAlpha = 1;
+        
+        ctx.beginPath();
+        ctx.moveTo(annotation.points[0].x, annotation.points[0].y);
+        for (let i = 1; i < annotation.points.length; i++) {
+          ctx.lineTo(annotation.points[i].x, annotation.points[i].y);
         }
-      });
-    };
-    img.src = image.imageData;
+        ctx.closePath();
+        ctx.stroke();
+
+        // Draw number at center
+        let sumX = 0, sumY = 0;
+        for (const p of annotation.points) {
+          sumX += p.x;
+          sumY += p.y;
+        }
+        const centerX = sumX / annotation.points.length;
+        const centerY = sumY / annotation.points.length;
+
+        // Draw number background and text
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.95)';
+        ctx.font = 'bold 24px Arial';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        const metrics = ctx.measureText(String(number));
+        const width = metrics.width + 16;
+        const height = 40;
+        ctx.fillRect(centerX - width / 2, centerY - height / 2, width, height);
+
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 2;
+        ctx.strokeRect(centerX - width / 2, centerY - height / 2, width, height);
+
+        ctx.fillStyle = color;
+        ctx.fillText(String(number), centerX, centerY);
+      }
+      // Draw point
+      else if (annotation.type === 'point' && annotation.startPoint) {
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.arc(annotation.startPoint.x, annotation.startPoint.y, 10, 0, Math.PI * 2);
+        ctx.stroke();
+
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.95)';
+        ctx.font = 'bold 24px Arial';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        const metrics = ctx.measureText(String(number));
+        const width = metrics.width + 16;
+        const height = 40;
+        ctx.fillRect(annotation.startPoint.x - width / 2, annotation.startPoint.y - height / 2, width, height);
+
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 2;
+        ctx.strokeRect(annotation.startPoint.x - width / 2, annotation.startPoint.y - height / 2, width, height);
+
+        ctx.fillStyle = color;
+        ctx.fillText(String(number), annotation.startPoint.x, annotation.startPoint.y);
+      }
+      // Draw circle
+      else if (annotation.type === 'circle' && annotation.startPoint && annotation.points && annotation.points.length > 0) {
+        const radius = Math.sqrt(
+          Math.pow(annotation.points[0].x - annotation.startPoint.x, 2) +
+            Math.pow(annotation.points[0].y - annotation.startPoint.y, 2)
+        );
+
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.arc(annotation.startPoint.x, annotation.startPoint.y, radius, 0, Math.PI * 2);
+        ctx.stroke();
+
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.95)';
+        ctx.font = 'bold 24px Arial';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        const metrics = ctx.measureText(String(number));
+        const width = metrics.width + 16;
+        const height = 40;
+        ctx.fillRect(annotation.startPoint.x - width / 2, annotation.startPoint.y - height / 2, width, height);
+
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 2;
+        ctx.strokeRect(annotation.startPoint.x - width / 2, annotation.startPoint.y - height / 2, width, height);
+
+        ctx.fillStyle = color;
+        ctx.fillText(String(number), annotation.startPoint.x, annotation.startPoint.y);
+      }
+      // Draw rectangle
+      else if (annotation.type === 'rectangle' && annotation.startPoint && annotation.points && annotation.points.length > 0) {
+        const width = annotation.points[0].x - annotation.startPoint.x;
+        const height = annotation.points[0].y - annotation.startPoint.y;
+
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 3;
+        ctx.strokeRect(annotation.startPoint.x, annotation.startPoint.y, width, height);
+
+        const centerX = annotation.startPoint.x + width / 2;
+        const centerY = annotation.startPoint.y + height / 2;
+
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.95)';
+        ctx.font = 'bold 24px Arial';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        const metrics = ctx.measureText(String(number));
+        const boxWidth = metrics.width + 16;
+        const boxHeight = 40;
+        ctx.fillRect(centerX - boxWidth / 2, centerY - boxHeight / 2, boxWidth, boxHeight);
+
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 2;
+        ctx.strokeRect(centerX - boxWidth / 2, centerY - boxHeight / 2, boxWidth, boxHeight);
+
+        ctx.fillStyle = color;
+        ctx.fillText(String(number), centerX, centerY);
+      }
+      // Draw freehand
+      else if (annotation.type === 'freehand' && annotation.points && annotation.points.length > 0) {
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.moveTo(annotation.points[0].x, annotation.points[0].y);
+        for (let i = 1; i < annotation.points.length; i++) {
+          ctx.lineTo(annotation.points[i].x, annotation.points[i].y);
+        }
+        ctx.stroke();
+
+        const lastPoint = annotation.points[annotation.points.length - 1];
+
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.95)';
+        ctx.font = 'bold 24px Arial';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        const metrics = ctx.measureText(String(number));
+        const width = metrics.width + 16;
+        const height = 40;
+        ctx.fillRect(lastPoint.x - width / 2, lastPoint.y - height / 2, width, height);
+
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 2;
+        ctx.strokeRect(lastPoint.x - width / 2, lastPoint.y - height / 2, width, height);
+
+        ctx.fillStyle = color;
+        ctx.fillText(String(number), lastPoint.x, lastPoint.y);
+      }
+    });
   };
+  img.src = image.imageData;
+};
 
   const handleAddAnnotation = (imageId: string, imageType: 'rgb' | 'thermal' | 'zoom', imageData: string) => {
     setAnnotationImageType(imageType);
@@ -226,30 +313,39 @@ export function MultiImageViewerPage() {
   };
 
   const handleSaveAnnotation = async (annotation: any) => {
-    const imageId = imagePairs[currentPairIndex]?.[annotationImageType === 'rgb' ? 'rgb' : annotationImageType === 'thermal' ? 'thermal' : 'zoom']?.id;
-    if (!imageId) return;
+  const imageId = imagePairs[currentPairIndex]?.[annotationImageType === 'rgb' ? 'rgb' : annotationImageType === 'thermal' ? 'thermal' : 'zoom']?.id;
+  if (!imageId) return;
 
-    try {
-      // Save to database
-      await mockAPI.createAnnotation({
-        projectId: id,
-        mediaId: imageId,
-        ...annotation,
-      });
+  try {
+    // Get next global defect number
+    const globalDefectNumber = getNextDefectNumber(id);
 
-      // Update local state
-      setAnnotationsByImage((prev) => ({
-        ...prev,
-        [imageId]: [...(prev[imageId] || []), annotation],
-      }));
+    // Add globalDefectNumber to annotation
+    const annotationWithNumber = {
+      ...annotation,
+      globalDefectNumber,
+    };
 
-      setShowAnnotationModal(false);
-      setAnnotationImageType(null);
-      setAnnotationImageData('');
-    } catch (error) {
-      console.error('Error saving annotation:', error);
-    }
-  };
+    // Save to database
+    await mockAPI.createAnnotation({
+      projectId: id,
+      mediaId: imageId,
+      ...annotationWithNumber,
+    });
+
+    // Update local state
+    setAnnotationsByImage((prev) => ({
+      ...prev,
+      [imageId]: [...(prev[imageId] || []), annotationWithNumber],
+    }));
+
+    setShowAnnotationModal(false);
+    setAnnotationImageType(null);
+    setAnnotationImageData('');
+  } catch (error) {
+    console.error('Error saving annotation:', error);
+  }
+};
 
   const handleDeleteAnnotation = async (imageId: string, annotationIndex: number) => {
     try {
@@ -498,7 +594,7 @@ export function MultiImageViewerPage() {
                                 fontSize: '12px',
                                 fontWeight: 'bold',
                               }}>
-                                {annotation.number || (idx + 1)}
+                                {annotation.globalDefectNumber}
                               </span>
                               <p style={{ color: '#DC143C', fontWeight: '600', margin: 0 }}>
                                 {annotation.defectType}
@@ -594,7 +690,7 @@ export function MultiImageViewerPage() {
                                 fontSize: '12px',
                                 fontWeight: 'bold',
                               }}>
-                                {annotation.number || (idx + 1)}
+                                {annotation.globalDefectNumber}
                               </span>
                               <p style={{ color: '#FF4444', fontWeight: '600', margin: 0 }}>
                                 {annotation.defectType}
@@ -687,7 +783,7 @@ export function MultiImageViewerPage() {
                                 fontSize: '12px',
                                 fontWeight: 'bold',
                               }}>
-                                {annotation.number || (idx + 1)}
+                                {annotation.globalDefectNumber}
                               </span>
                               <p style={{ color: '#8B5CF6', fontWeight: '600', margin: 0 }}>
                                 {annotation.defectType}

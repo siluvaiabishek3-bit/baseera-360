@@ -15,10 +15,13 @@ export function ProjectDetailsPage() {
   const [showUploadModal, setShowUploadModal] = useState(false);
   const [showReportConfig, setShowReportConfig] = useState(false);
   const [stats, setStats] = useState<any>(null);
+  const [allAnnotations, setAllAnnotations] = useState<any[]>([]);
   const [media, setMedia] = useState<any[]>([]);
   const [phases, setPhases] = useState<string[]>([]);
   const [selectedPhase, setSelectedPhase] = useState<string | null>(null);
   const [selectedFloor, setSelectedFloor] = useState<string | null>(null);
+  const [selectedSeverity, setSelectedSeverity] = useState<string | null>(null);
+  const [selectedDefectType, setSelectedDefectType] = useState<string | null>(null);
   const [floors, setFloors] = useState<{ [key: string]: string[] }>({});
   const [selectedImageType, setSelectedImageType] = useState<'rgb' | 'thermal' | 'zoom' | null>(null);
   const [showImageViewer, setShowImageViewer] = useState(false);
@@ -30,37 +33,71 @@ export function ProjectDetailsPage() {
   }, [id]);
 
   const fetchData = async () => {
-    try {
-      const projectData = await mockAPI.getProjectById(id);
-      setProject(projectData);
+  try {
+    const projectData = await mockAPI.getProjectById(id);
+    setProject(projectData);
 
-      const statsData = await mockAPI.getProjectStats(id);
-      setStats(statsData);
+    // Fetch media to count images
+    const mediaData = await mockAPI.getMediaByProject(id);
+    setMedia(mediaData);
 
-      const mediaData = await mockAPI.getMediaByProject(id);
-      setMedia(mediaData);
+    // Count images by type
+    const rgbCount = mediaData.filter(m => m.type === 'rgb').length;
+    const thermalCount = mediaData.filter(m => m.type === 'thermal').length;
+    const zoomCount = mediaData.filter(m => m.type === 'zoom').length;
+    const totalImages = mediaData.length;
 
-      const phasesData = await mockAPI.getPhasesByProject(id);
-      setPhases(phasesData);
+    // Fetch annotations for defect stats
+    const annotationsData = await mockAPI.getAnnotationsByProject(id);
+    setAllAnnotations(annotationsData);
 
-      // Set first phase as default
-      if (phasesData.length > 0) {
-        setSelectedPhase(phasesData[0]);
-      }
+    const totalDefects = annotationsData.length;
+    const criticalCount = annotationsData.filter(a => a.severity === 'CRITICAL').length;
+    const highCount = annotationsData.filter(a => a.severity === 'HIGH').length;
+    const mediumCount = annotationsData.filter(a => a.severity === 'MEDIUM').length;
+    const lowCount = annotationsData.filter(a => a.severity === 'LOW').length;
 
-      // Load floors for each phase
-      const floorsMap: { [key: string]: string[] } = {};
-      for (const phase of phasesData) {
-        const floorsData = await mockAPI.getFloorsByPhase(id, phase);
-        floorsMap[phase] = floorsData;
-      }
-      setFloors(floorsMap);
-    } catch (error) {
-      console.error('Error:', error);
-    } finally {
-      setLoading(false);
+    // Get unique defect types
+    const defectTypes = [...new Set(annotationsData.map(a => a.defectType))];
+    const defectTypesCounts = defectTypes.map(type => ({
+      type,
+      count: annotationsData.filter(a => a.defectType === type).length,
+    })).sort((a, b) => b.count - a.count);
+
+    // Set all stats at once
+    setStats({
+      totalImages,
+      rgbCount,
+      thermalCount,
+      zoomCount,
+      totalDefects,
+      criticalCount,
+      highCount,
+      mediumCount,
+      lowCount,
+      defectTypes: defectTypesCounts,
+    });
+
+    const phasesData = await mockAPI.getPhasesByProject(id);
+    setPhases(phasesData);
+
+    if (phasesData.length > 0) {
+      setSelectedPhase(phasesData[0]);
     }
-  };
+
+    // Load floors for each phase
+    const floorsMap: { [key: string]: string[] } = {};
+    for (const phase of phasesData) {
+      const floorsData = await mockAPI.getFloorsByPhase(id, phase);
+      floorsMap[phase] = floorsData;
+    }
+    setFloors(floorsMap);
+  } catch (error) {
+    console.error('Error:', error);
+  } finally {
+    setLoading(false);
+  }
+};
 
   const handleUploadSuccess = () => {
     fetchData();
@@ -827,24 +864,433 @@ export function ProjectDetailsPage() {
       )}
 
       {/* ANALYTICS TAB */}
-      {activeTab === 'analytics' && (
-        <div style={{ backgroundColor: 'white', padding: '24px', borderRadius: '8px', border: '1px solid #e5e7eb' }}>
-          <h2 style={{ fontSize: '18px', fontWeight: 'bold', color: '#1a1a1a', marginBottom: '16px' }}>
-            Project Analytics
-          </h2>
-          <p style={{ color: '#666', margin: 0 }}>Analytics features coming soon...</p>
+{activeTab === 'analytics' && (
+  <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+    {/* STATS CARDS */}
+    <div style={{
+      display: 'grid',
+      gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))',
+      gap: '16px',
+    }}>
+      {/* Total Defects */}
+      <div style={{
+        backgroundColor: 'white',
+        border: '1px solid #e5e7eb',
+        borderRadius: '8px',
+        padding: '20px',
+      }}>
+        <p style={{ fontSize: '12px', color: '#666', fontWeight: '600', margin: '0 0 12px 0' }}>Total Defects</p>
+        <h2 style={{ fontSize: '32px', fontWeight: 'bold', color: '#1a1a1a', margin: 0 }}>
+          {stats?.totalDefects || 0}
+        </h2>
+      </div>
+
+      {/* Critical */}
+      <div style={{
+        backgroundColor: 'white',
+        border: '2px solid #DC143C',
+        borderRadius: '8px',
+        padding: '20px',
+      }}>
+        <p style={{ fontSize: '12px', color: '#DC143C', fontWeight: '600', margin: '0 0 12px 0' }}>🔴 Critical</p>
+        <h2 style={{ fontSize: '32px', fontWeight: 'bold', color: '#DC143C', margin: 0 }}>
+          {stats?.criticalCount || 0}
+        </h2>
+      </div>
+
+      {/* High */}
+      <div style={{
+        backgroundColor: 'white',
+        border: '2px solid #FF6600',
+        borderRadius: '8px',
+        padding: '20px',
+      }}>
+        <p style={{ fontSize: '12px', color: '#FF6600', fontWeight: '600', margin: '0 0 12px 0' }}>🟠 High</p>
+        <h2 style={{ fontSize: '32px', fontWeight: 'bold', color: '#FF6600', margin: 0 }}>
+          {stats?.highCount || 0}
+        </h2>
+      </div>
+
+      {/* Medium */}
+      <div style={{
+        backgroundColor: 'white',
+        border: '2px solid #FFC107',
+        borderRadius: '8px',
+        padding: '20px',
+      }}>
+        <p style={{ fontSize: '12px', color: '#FFC107', fontWeight: '600', margin: '0 0 12px 0' }}>🟡 Medium</p>
+        <h2 style={{ fontSize: '32px', fontWeight: 'bold', color: '#FFC107', margin: 0 }}>
+          {stats?.mediumCount || 0}
+        </h2>
+      </div>
+
+      {/* Low */}
+      <div style={{
+        backgroundColor: 'white',
+        border: '2px solid #4CAF50',
+        borderRadius: '8px',
+        padding: '20px',
+      }}>
+        <p style={{ fontSize: '12px', color: '#4CAF50', fontWeight: '600', margin: '0 0 12px 0' }}>🟢 Low</p>
+        <h2 style={{ fontSize: '32px', fontWeight: 'bold', color: '#4CAF50', margin: 0 }}>
+          {stats?.lowCount || 0}
+        </h2>
+      </div>
+    </div>
+
+    {/* CHARTS SECTION */}
+    <div style={{
+      display: 'grid',
+      gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))',
+      gap: '24px',
+    }}>
+      {/* Defects by Type */}
+      <div style={{
+        backgroundColor: 'white',
+        border: '1px solid #e5e7eb',
+        borderRadius: '8px',
+        padding: '20px',
+      }}>
+        <h3 style={{ fontSize: '16px', fontWeight: 'bold', color: '#1a1a1a', margin: '0 0 20px 0' }}>
+          📊 Defects by Type
+        </h3>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+          {stats?.defectTypes && stats.defectTypes.length > 0 ? (
+            stats.defectTypes.map((item: any) => {
+              const percentage = stats.totalDefects > 0 ? (item.count / stats.totalDefects) * 100 : 0;
+              return (
+                <div key={item.type}>
+                  <div style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    marginBottom: '6px',
+                  }}>
+                    <span style={{ color: '#1a1a1a', fontSize: '12px', fontWeight: '600' }}>
+                      {item.type}
+                    </span>
+                    <span style={{ color: '#666', fontSize: '12px' }}>
+                      {item.count}
+                    </span>
+                  </div>
+                  <div style={{
+                    width: '100%',
+                    height: '8px',
+                    backgroundColor: '#f3f4f6',
+                    borderRadius: '4px',
+                    overflow: 'hidden',
+                  }}>
+                    <div
+                      style={{
+                        height: '100%',
+                        backgroundColor: '#DC143C',
+                        width: `${percentage}%`,
+                        transition: 'width 0.3s',
+                      }}
+                    />
+                  </div>
+                </div>
+              );
+            })
+          ) : (
+            <p style={{ color: '#999', textAlign: 'center' }}>No data available</p>
+          )}
         </div>
-      )}
+      </div>
+
+      {/* Image Upload Stats */}
+<div style={{
+  backgroundColor: 'white',
+  border: '1px solid #e5e7eb',
+  borderRadius: '8px',
+  padding: '20px',
+}}>
+  <h3 style={{ fontSize: '16px', fontWeight: 'bold', color: '#1a1a1a', margin: '0 0 20px 0' }}>
+    📸 Image Upload & Annotation Status
+  </h3>
+  <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+    {[
+      { label: '📷 RGB Images', color: '#3B82F6', uploaded: stats?.rgbCount || 0 },
+      { label: '🌡️ Thermal Images', color: '#FF4444', uploaded: stats?.thermalCount || 0 },
+      { label: '🔍 Zoom Images', color: '#8B5CF6', uploaded: stats?.zoomCount || 0 },
+    ].map((item) => {
+      const annotatedCount = Math.floor((item.uploaded / (stats?.totalImages || 1)) * stats?.totalDefects || 0);
+      const annotationPercentage = item.uploaded > 0 ? (annotatedCount / item.uploaded) * 100 : 0;
+      return (
+        <div key={item.label}>
+          <div style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            marginBottom: '6px',
+          }}>
+            <span style={{ color: '#1a1a1a', fontSize: '12px', fontWeight: '600' }}>
+              {item.label}
+            </span>
+            <span style={{ color: item.color, fontSize: '12px', fontWeight: 'bold' }}>
+              {item.uploaded} uploaded
+            </span>
+          </div>
+          <div style={{
+            width: '100%',
+            height: '8px',
+            backgroundColor: '#f3f4f6',
+            borderRadius: '4px',
+            overflow: 'hidden',
+            marginBottom: '4px',
+          }}>
+            <div
+              style={{
+                height: '100%',
+                backgroundColor: item.color,
+                width: `${item.uploaded > 0 ? 100 : 0}%`,
+                transition: 'width 0.3s',
+              }}
+            />
+          </div>
+          <div style={{
+            fontSize: '11px',
+            color: '#666',
+            display: 'flex',
+            justifyContent: 'space-between',
+          }}>
+            <span>Annotated with defects:</span>
+            <span style={{ color: item.color, fontWeight: 'bold' }}>
+              {annotatedCount} ({annotationPercentage.toFixed(1)}%)
+            </span>
+          </div>
+        </div>
+      );
+    })}
+  </div>
+</div>
+    </div>
+  </div>
+)}
 
       {/* INSPECTIONS TAB */}
-      {activeTab === 'inspections' && (
-        <div style={{ backgroundColor: 'white', padding: '24px', borderRadius: '8px', border: '1px solid #e5e7eb' }}>
-          <h2 style={{ fontSize: '18px', fontWeight: 'bold', color: '#1a1a1a', marginBottom: '16px' }}>
-            Inspections
-          </h2>
-          <p style={{ color: '#666', margin: 0 }}>Inspection data and annotations will appear here...</p>
+{activeTab === 'inspections' && (
+  <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+    {/* FILTERS */}
+    <div style={{
+      backgroundColor: 'white',
+      border: '1px solid #e5e7eb',
+      borderRadius: '8px',
+      padding: '20px',
+    }}>
+      <h3 style={{ fontSize: '14px', fontWeight: 'bold', color: '#1a1a1a', margin: '0 0 16px 0' }}>
+        🔍 Filters
+      </h3>
+
+      <div style={{
+        display: 'grid',
+        gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))',
+        gap: '16px',
+      }}>
+        {/* Severity Filter */}
+        <div>
+          <label style={{ display: 'block', color: '#666', fontSize: '12px', fontWeight: '600', marginBottom: '8px' }}>
+            Severity
+          </label>
+          <select
+            value={selectedSeverity || ''}
+            onChange={(e) => setSelectedSeverity(e.target.value || null)}
+            style={{
+              width: '100%',
+              padding: '8px',
+              backgroundColor: '#f9fafb',
+              color: '#1a1a1a',
+              border: '1px solid #e5e7eb',
+              borderRadius: '4px',
+              cursor: 'pointer',
+              fontSize: '12px',
+            }}
+          >
+            <option value="">All Severities</option>
+            <option value="CRITICAL">🔴 Critical</option>
+            <option value="HIGH">🟠 High</option>
+            <option value="MEDIUM">🟡 Medium</option>
+            <option value="LOW">🟢 Low</option>
+          </select>
+        </div>
+
+        {/* Defect Type Filter */}
+        <div>
+          <label style={{ display: 'block', color: '#666', fontSize: '12px', fontWeight: '600', marginBottom: '8px' }}>
+            Defect Type
+          </label>
+          <select
+            value={selectedDefectType || ''}
+            onChange={(e) => setSelectedDefectType(e.target.value || null)}
+            style={{
+              width: '100%',
+              padding: '8px',
+              backgroundColor: '#f9fafb',
+              color: '#1a1a1a',
+              border: '1px solid #e5e7eb',
+              borderRadius: '4px',
+              cursor: 'pointer',
+              fontSize: '12px',
+            }}
+          >
+            <option value="">All Types</option>
+            {stats?.defectTypes && stats.defectTypes.map((type: any) => (
+              <option key={type.type} value={type.type}>
+                {type.type}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        {/* Reset Button */}
+        <div style={{ display: 'flex', alignItems: 'flex-end' }}>
+          <button
+            onClick={() => {
+              setSelectedSeverity(null);
+              setSelectedDefectType(null);
+            }}
+            style={{
+              width: '100%',
+              padding: '8px',
+              backgroundColor: '#DC143C',
+              color: 'white',
+              border: 'none',
+              borderRadius: '4px',
+              cursor: 'pointer',
+              fontWeight: '600',
+              fontSize: '12px',
+            }}
+          >
+            Reset Filters
+          </button>
+        </div>
+      </div>
+    </div>
+
+    {/* DEFECTS LIST */}
+    <div style={{
+      backgroundColor: 'white',
+      border: '1px solid #e5e7eb',
+      borderRadius: '8px',
+      padding: '20px',
+    }}>
+      <h3 style={{ fontSize: '16px', fontWeight: 'bold', color: '#1a1a1a', margin: '0 0 20px 0' }}>
+        📋 All Defects & Annotations
+      </h3>
+
+      {stats?.totalDefects === 0 ? (
+        <p style={{ color: '#999', textAlign: 'center', padding: '40px 20px', margin: 0 }}>
+          No defects found. Annotate images in Multi-Image Viewer to see them here.
+        </p>
+      ) : (
+        <div style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))',
+          gap: '16px',
+        }}>
+          {allAnnotations
+  .filter(annotation => {
+    if (selectedSeverity && annotation.severity !== selectedSeverity) return false;
+    if (selectedDefectType && annotation.defectType !== selectedDefectType) return false;
+    return true;
+  })
+  .map((annotation) => {
+    const mediaItem = media.find(m => m.id === annotation.mediaId);
+    if (!mediaItem) return null;
+
+    return (
+      <div key={annotation.id} style={{
+        backgroundColor: '#f9fafb',
+        border: '1px solid #e5e7eb',
+        borderRadius: '8px',
+        overflow: 'hidden',
+      }}>
+        {/* IMAGE */}
+        <div style={{
+          width: '100%',
+          height: '150px',
+          backgroundColor: '#e5e7eb',
+          overflow: 'hidden',
+        }}>
+          <img
+            src={mediaItem.imageData}
+            alt={mediaItem.type}
+            style={{
+              width: '100%',
+              height: '100%',
+              objectFit: 'cover',
+              cursor: 'pointer',
+            }}
+            onClick={() => openImageViewer(mediaItem)}
+          />
+        </div>
+
+        {/* INFO */}
+        <div style={{ padding: '12px' }}>
+          <div style={{
+            fontSize: '11px',
+            fontWeight: '600',
+            color: '#666',
+            marginBottom: '12px',
+            textTransform: 'uppercase',
+          }}>
+            {mediaItem.type} • {mediaItem.phase} - {mediaItem.floor}
+          </div>
+
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+          }}>
+            <span style={{
+              width: '28px',
+              height: '28px',
+              backgroundColor: annotation.severity === 'CRITICAL' ? '#DC143C' :
+                              annotation.severity === 'HIGH' ? '#FF6600' :
+                              annotation.severity === 'MEDIUM' ? '#FFC107' : '#4CAF50',
+              color: 'white',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              borderRadius: '50%',
+              fontSize: '12px',
+              fontWeight: 'bold',
+            }}>
+              {annotation.globalDefectNumber}
+            </span>
+            <div>
+              <p style={{
+                fontSize: '12px',
+                fontWeight: '600',
+                color: '#1a1a1a',
+                margin: '0 0 4px 0',
+              }}>
+                {annotation.defectType}
+              </p>
+              <span style={{
+                display: 'inline-block',
+                padding: '3px 10px',
+                borderRadius: '4px',
+                backgroundColor: annotation.severity === 'CRITICAL' ? '#DC143C' :
+                                annotation.severity === 'HIGH' ? '#FF6600' :
+                                annotation.severity === 'MEDIUM' ? '#FFC107' : '#4CAF50',
+                color: annotation.severity === 'MEDIUM' ? '#000' : '#fff',
+                fontWeight: '600',
+                fontSize: '10px',
+              }}>
+                {annotation.severity}
+              </span>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  })}
         </div>
       )}
+    </div>
+  </div>
+)}
 
       {/* REPORTS TAB */}
       {activeTab === 'reports' && (
