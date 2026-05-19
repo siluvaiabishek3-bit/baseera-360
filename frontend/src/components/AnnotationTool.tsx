@@ -10,6 +10,7 @@ interface AnnotationToolProps {
   onSave: (annotation: any) => void;
   onCancel: () => void;
 }
+
 export function AnnotationTool({
   imageType,
   imageData,
@@ -28,6 +29,7 @@ export function AnnotationTool({
   const [defectType, setDefectType] = useState('Crack');
   const [severity, setSeverity] = useState('MEDIUM');
   const [description, setDescription] = useState('');
+  const [remedialAction, setRemedialAction] = useState('');
   const [temperatureData, setTemperatureData] = useState<any>(null);
   const [loadingTemperature, setLoadingTemperature] = useState(false);
   const [image, setImage] = useState<HTMLImageElement | null>(null);
@@ -153,7 +155,6 @@ export function AnnotationTool({
 
     if (mode === 'point') {
       setStartPoint({ x, y });
-      // Extract temperature for point - ONLY if thermal data exists
       if (imageType === 'thermal' && hasThermalData) {
         setLoadingTemperature(true);
         try {
@@ -199,7 +200,6 @@ export function AnnotationTool({
   const handleCanvasMouseUp = async () => {
     if (mode === 'circle' || mode === 'rectangle') {
       setIsDrawing(false);
-      // Extract temperature for polygon - ONLY if thermal data exists
       if (imageType === 'thermal' && hasThermalData && startPoint && points.length > 0) {
         setLoadingTemperature(true);
         try {
@@ -215,7 +215,6 @@ export function AnnotationTool({
       setShowForm(true);
     } else if (mode === 'freehand') {
       setIsDrawing(false);
-      // Extract temperature for freehand - ONLY if thermal data exists
       if (imageType === 'thermal' && hasThermalData && startPoint && points.length > 1) {
         setLoadingTemperature(true);
         try {
@@ -232,10 +231,94 @@ export function AnnotationTool({
     }
   };
 
+  // ========== DRAW DEFECT NUMBER ON CANVAS ==========
+  const drawDefectNumber = (ctx: CanvasRenderingContext2D, number: number) => {
+    if (!startPoint) return;
+
+    const fontSize = Math.max(40, (Math.min(ctx.canvas.width, ctx.canvas.height) * 0.04));
+    const labelWidth = fontSize * 1.2;
+    const labelHeight = fontSize * 1.5;
+
+    // Draw white background box
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.95)';
+    ctx.fillRect(
+      startPoint.x - labelWidth / 2,
+      startPoint.y - labelHeight / 2,
+      labelWidth,
+      labelHeight
+    );
+
+    // Draw border
+    ctx.strokeStyle = '#DC143C';
+    ctx.lineWidth = 3;
+    ctx.strokeRect(
+      startPoint.x - labelWidth / 2,
+      startPoint.y - labelHeight / 2,
+      labelWidth,
+      labelHeight
+    );
+
+    // Draw number
+    ctx.fillStyle = '#DC143C';
+    ctx.font = `bold ${fontSize}px Arial`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(String(number), startPoint.x, startPoint.y);
+  };
+
+  // ========== CAPTURE CANVAS WITH DEFECT NUMBER ==========
   const handleSave = () => {
     if (!defectType || !severity) {
       alert('Please fill in all required fields');
       return;
+    }
+
+    const canvas = canvasRef.current;
+    const globalDefectNumber = existingAnnotationCount + 1;
+
+    console.log('🖼️ Canvas element exists:', !!canvas);
+    console.log('Canvas dimensions:', canvas?.width, 'x', canvas?.height);
+    console.log('Global Defect Number:', globalDefectNumber);
+
+    let annotatedImageData = '';
+
+    if (canvas) {
+      try {
+        const ctx = canvas.getContext('2d');
+        if (ctx) {
+          // Draw the defect number on the canvas BEFORE capturing
+          console.log('🔢 Drawing defect number #' + globalDefectNumber + ' on canvas...');
+          drawDefectNumber(ctx, globalDefectNumber);
+        }
+
+        // Verify canvas has content
+        const imageData = ctx?.getImageData(0, 0, canvas.width, canvas.height);
+        const data = imageData?.data;
+        let hasDrawing = false;
+
+        if (data) {
+          for (let i = 3; i < data.length; i += 4) {
+            if (data[i] > 0) {
+              hasDrawing = true;
+              break;
+            }
+          }
+        }
+
+        console.log('🎨 Canvas has content:', hasDrawing);
+
+        // Convert canvas to base64
+        annotatedImageData = canvas.toDataURL('image/jpeg', 0.95);
+
+        console.log('✅ CANVAS CONVERTED TO BASE64');
+        console.log('   Length:', annotatedImageData.length, 'characters');
+        console.log('   Size: ~', (annotatedImageData.length / 1024).toFixed(2), 'KB');
+      } catch (error) {
+        console.error('❌ Could not capture canvas:', error);
+        annotatedImageData = '';
+      }
+    } else {
+      console.error('❌ Canvas ref is NULL');
     }
 
     const annotation = {
@@ -245,11 +328,25 @@ export function AnnotationTool({
       defectType,
       severity,
       description,
+      remedialAction,
       temperatureData: imageType === 'thermal' ? temperatureData : undefined,
       imageType,
       number: existingAnnotationCount + 1,
+      annotatedImageData,
+      globalDefectNumber, // ← Send the number
     };
 
+    console.log('📦 ANNOTATION OBJECT BEING SAVED:');
+    console.log({
+      type: annotation.type,
+      defectType: annotation.defectType,
+      severity: annotation.severity,
+      globalDefectNumber: annotation.globalDefectNumber,
+      hasAnnotatedImageData: !!annotation.annotatedImageData,
+      annotatedImageDataSizeKB: annotation.annotatedImageData ? (annotation.annotatedImageData.length / 1024).toFixed(2) : 0,
+    });
+
+    console.log('📤 Calling onSave with annotation...');
     onSave(annotation);
     resetForm();
   };
@@ -262,6 +359,7 @@ export function AnnotationTool({
     setDefectType('Crack');
     setSeverity('MEDIUM');
     setDescription('');
+    setRemedialAction('');
     setTemperatureData(null);
     setLoadingTemperature(false);
     if (image) {
@@ -280,243 +378,121 @@ export function AnnotationTool({
   };
 
   return (
-    <div
-      style={{
-        position: 'fixed',
-        inset: 0,
-        backgroundColor: 'rgba(0, 0, 0, 0.95)',
-        display: 'flex',
-        flexDirection: 'column',
-        zIndex: 100,
-      }}
-    >
-      {/* HEADER */}
-      <div
-        style={{
-          backgroundColor: '#0f0f0f',
-          borderBottom: '1px solid #DC143C',
-          padding: '16px 24px',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-        }}
-      >
-        <h2 style={{ color: '#fff', fontSize: '18px', fontWeight: 'bold' }}>
-          Add {imageType.toUpperCase()} Annotation (#{existingAnnotationCount + 1})
-        </h2>
-        <button
-          onClick={onCancel}
-          style={{
-            backgroundColor: 'transparent',
-            border: 'none',
-            color: '#DC143C',
-            cursor: 'pointer',
-            fontSize: '32px',
-            fontWeight: 'bold',
-            padding: '0',
-            width: '40px',
-            height: '40px',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            transition: 'all 0.3s',
-          }}
-          onMouseEnter={(e) => {
-            e.currentTarget.style.backgroundColor = 'rgba(220, 20, 60, 0.2)';
-            e.currentTarget.style.borderRadius = '4px';
-          }}
-          onMouseLeave={(e) => {
-            e.currentTarget.style.backgroundColor = 'transparent';
-          }}
-        >
-          ×
-        </button>
-      </div>
-
-      {/* TOOLS BAR */}
-      <div
-        style={{
-          backgroundColor: '#0f0f0f',
-          borderBottom: '1px solid #333',
-          padding: '16px 24px',
-          display: 'flex',
-          alignItems: 'center',
-          gap: '12px',
-          flexWrap: 'wrap',
-        }}
-      >
-        <span style={{ color: '#999', fontSize: '12px', fontWeight: '600' }}>DRAWING TOOLS:</span>
-
-        <button
-          onClick={() => {
-            setMode('point');
-            setShowForm(false);
-            setStartPoint(null);
-            setPoints([]);
-            setTemperatureData(null);
-            if (canvasData) redrawCanvas();
-          }}
-          style={{
-            padding: '8px 16px',
-            backgroundColor: mode === 'point' ? '#DC143C' : '#1a1a1a',
-            color: mode === 'point' ? 'white' : '#fff',
-            border: `1px solid ${mode === 'point' ? '#DC143C' : '#333'}`,
-            borderRadius: '4px',
-            cursor: 'pointer',
-            fontWeight: '600',
-            fontSize: '12px',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '6px',
-            transition: 'all 0.3s',
-          }}
-          onMouseEnter={(e) => {
-            if (mode !== 'point') {
-              e.currentTarget.style.borderColor = '#DC143C';
-            }
-          }}
-          onMouseLeave={(e) => {
-            if (mode !== 'point') {
-              e.currentTarget.style.borderColor = '#333';
-            }
-          }}
-        >
-          <MousePointer size={14} />
-          Point
-        </button>
-
-        <button
-          onClick={() => {
-            setMode('circle');
-            setShowForm(false);
-            setStartPoint(null);
-            setPoints([]);
-            setTemperatureData(null);
-            if (canvasData) redrawCanvas();
-          }}
-          style={{
-            padding: '8px 16px',
-            backgroundColor: mode === 'circle' ? '#DC143C' : '#1a1a1a',
-            color: mode === 'circle' ? 'white' : '#fff',
-            border: `1px solid ${mode === 'circle' ? '#DC143C' : '#333'}`,
-            borderRadius: '4px',
-            cursor: 'pointer',
-            fontWeight: '600',
-            fontSize: '12px',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '6px',
-            transition: 'all 0.3s',
-          }}
-          onMouseEnter={(e) => {
-            if (mode !== 'circle') {
-              e.currentTarget.style.borderColor = '#DC143C';
-            }
-          }}
-          onMouseLeave={(e) => {
-            if (mode !== 'circle') {
-              e.currentTarget.style.borderColor = '#333';
-            }
-          }}
-        >
-          <Circle size={14} />
-          Circle
-        </button>
-
-        <button
-          onClick={() => {
-            setMode('rectangle');
-            setShowForm(false);
-            setStartPoint(null);
-            setPoints([]);
-            setTemperatureData(null);
-            if (canvasData) redrawCanvas();
-          }}
-          style={{
-            padding: '8px 16px',
-            backgroundColor: mode === 'rectangle' ? '#DC143C' : '#1a1a1a',
-            color: mode === 'rectangle' ? 'white' : '#fff',
-            border: `1px solid ${mode === 'rectangle' ? '#DC143C' : '#333'}`,
-            borderRadius: '4px',
-            cursor: 'pointer',
-            fontWeight: '600',
-            fontSize: '12px',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '6px',
-            transition: 'all 0.3s',
-          }}
-          onMouseEnter={(e) => {
-            if (mode !== 'rectangle') {
-              e.currentTarget.style.borderColor = '#DC143C';
-            }
-          }}
-          onMouseLeave={(e) => {
-            if (mode !== 'rectangle') {
-              e.currentTarget.style.borderColor = '#333';
-            }
-          }}
-        >
-          <Square size={14} />
-          Rectangle
-        </button>
-
-        <button
-          onClick={() => {
-            setMode('freehand');
-            setShowForm(false);
-            setStartPoint(null);
-            setPoints([]);
-            setTemperatureData(null);
-            if (canvasData) redrawCanvas();
-          }}
-          style={{
-            padding: '8px 16px',
-            backgroundColor: mode === 'freehand' ? '#DC143C' : '#1a1a1a',
-            color: mode === 'freehand' ? 'white' : '#fff',
-            border: `1px solid ${mode === 'freehand' ? '#DC143C' : '#333'}`,
-            borderRadius: '4px',
-            cursor: 'pointer',
-            fontWeight: '600',
-            fontSize: '12px',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '6px',
-            transition: 'all 0.3s',
-          }}
-          onMouseEnter={(e) => {
-            if (mode !== 'freehand') {
-              e.currentTarget.style.borderColor = '#DC143C';
-            }
-          }}
-          onMouseLeave={(e) => {
-            if (mode !== 'freehand') {
-              e.currentTarget.style.borderColor = '#333';
-            }
-          }}
-        >
-          <PenTool size={14} />
-          Freehand
-        </button>
-      </div>
-
-      {/* MAIN CONTENT */}
-      <div style={{ flex: 1, display: 'grid', gridTemplateColumns: '1fr 380px', gap: '24px', padding: '24px', overflow: 'hidden' }}>
-        {/* CANVAS AREA */}
+    <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0, 0, 0, 0.8)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <div style={{ backgroundColor: '#000', borderRadius: '12px', boxShadow: '0 20px 60px rgba(0, 0, 0, 0.9)', width: '90vw', height: '90vh', maxWidth: '1400px', display: 'flex', overflow: 'hidden' }}>
+        {/* Canvas Area */}
         <div
-          ref={canvasContainerRef}
           style={{
-            backgroundColor: '#0f0f0f',
-            border: '1px solid #333',
-            borderRadius: '8px',
-            padding: '16px',
+            flex: 1,
             display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            overflow: 'auto',
+            flexDirection: 'column',
+            backgroundColor: '#000',
+            borderRight: '1px solid #222',
           }}
         >
-          {image ? (
+          {/* Toolbar */}
+          <div
+            style={{
+              padding: '12px',
+              display: 'flex',
+              gap: '8px',
+              backgroundColor: '#111',
+              borderBottom: '1px solid #222',
+              alignItems: 'center',
+              flexWrap: 'wrap',
+            }}
+          >
+            <button
+              onClick={() => setMode('point')}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+                padding: '6px 12px',
+                backgroundColor: mode === 'point' ? '#DC143C' : '#222',
+                color: '#fff',
+                border: 'none',
+                borderRadius: '4px',
+                cursor: 'pointer',
+                fontSize: '12px',
+                fontWeight: '600',
+              }}
+              title="Click to place a point"
+            >
+              <MousePointer size={14} /> Point
+            </button>
+            <button
+              onClick={() => setMode('circle')}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+                padding: '6px 12px',
+                backgroundColor: mode === 'circle' ? '#DC143C' : '#222',
+                color: '#fff',
+                border: 'none',
+                borderRadius: '4px',
+                cursor: 'pointer',
+                fontSize: '12px',
+                fontWeight: '600',
+              }}
+              title="Drag to draw a circle"
+            >
+              <Circle size={14} /> Circle
+            </button>
+            <button
+              onClick={() => setMode('rectangle')}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+                padding: '6px 12px',
+                backgroundColor: mode === 'rectangle' ? '#DC143C' : '#222',
+                color: '#fff',
+                border: 'none',
+                borderRadius: '4px',
+                cursor: 'pointer',
+                fontSize: '12px',
+                fontWeight: '600',
+              }}
+              title="Drag to draw a rectangle"
+            >
+              <Square size={14} /> Rectangle
+            </button>
+            <button
+              onClick={() => setMode('freehand')}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+                padding: '6px 12px',
+                backgroundColor: mode === 'freehand' ? '#DC143C' : '#222',
+                color: '#fff',
+                border: 'none',
+                borderRadius: '4px',
+                cursor: 'pointer',
+                fontSize: '12px',
+                fontWeight: '600',
+              }}
+              title="Click and drag to draw freehand"
+            >
+              <PenTool size={14} /> Freehand
+            </button>
+          </div>
+
+          {/* Canvas */}
+          <div
+            ref={canvasContainerRef}
+            style={{
+              flex: 1,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              backgroundColor: '#000',
+              overflow: 'hidden',
+              cursor: mode ? 'crosshair' : 'default',
+            }}
+          >
             <canvas
               ref={canvasRef}
               onMouseDown={handleCanvasMouseDown}
@@ -524,35 +500,71 @@ export function AnnotationTool({
               onMouseUp={handleCanvasMouseUp}
               onMouseLeave={handleCanvasMouseUp}
               style={{
-                cursor: mode ? 'crosshair' : 'default',
-                border: '1px solid #333',
-                borderRadius: '4px',
-                backgroundColor: '#1a1a1a',
+                maxWidth: '100%',
+                maxHeight: '100%',
                 display: 'block',
+                border: '1px solid #333',
               }}
             />
-          ) : (
-            <div style={{ color: '#999', fontSize: '14px' }}>Loading image...</div>
-          )}
+          </div>
+
+          {/* Close Button */}
+          <div
+            style={{
+              padding: '12px',
+              backgroundColor: '#111',
+              borderTop: '1px solid #222',
+              textAlign: 'right',
+            }}
+          >
+            <button
+              onClick={onCancel}
+              style={{
+                padding: '6px 16px',
+                backgroundColor: '#333',
+                color: '#fff',
+                border: 'none',
+                borderRadius: '4px',
+                cursor: 'pointer',
+                fontSize: '12px',
+                fontWeight: '600',
+              }}
+            >
+              ✕ Close
+            </button>
+          </div>
         </div>
 
-        {/* FORM SIDEBAR */}
+        {/* Sidebar Form */}
         {showForm && (
           <div
             style={{
-              backgroundColor: '#0f0f0f',
-              border: '1px solid #333',
-              borderRadius: '8px',
-              padding: '16px',
+              width: '320px',
               display: 'flex',
               flexDirection: 'column',
               gap: '16px',
+              padding: '16px',
+              backgroundColor: '#0a0a0a',
+              borderLeft: '1px solid #222',
               overflowY: 'auto',
             }}
           >
-            <h3 style={{ color: '#fff', fontWeight: 'bold', fontSize: '14px' }}>Annotation #{existingAnnotationCount + 1}</h3>
+            {/* DEFECT NUMBER DISPLAY */}
+            <div style={{
+              backgroundColor: '#DC143C',
+              borderRadius: '6px',
+              padding: '12px',
+              textAlign: 'center',
+            }}>
+              <div style={{ color: '#fff', fontSize: '12px', fontWeight: '600', marginBottom: '4px' }}>
+                DEFECT #
+              </div>
+              <div style={{ color: '#fff', fontSize: '28px', fontWeight: 'bold' }}>
+                {existingAnnotationCount + 1}
+              </div>
+            </div>
 
-            {/* THERMAL DATA SECTION */}
+            {/* THERMAL DATA */}
             {imageType === 'thermal' && temperatureData ? (
               <div style={{
                 backgroundColor: '#1a1a1a',
@@ -695,7 +707,7 @@ export function AnnotationTool({
               <textarea
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
-                placeholder="Add notes..."
+                placeholder="Add notes about the defect..."
                 style={{
                   width: '100%',
                   padding: '8px',
@@ -705,6 +717,30 @@ export function AnnotationTool({
                   borderRadius: '4px',
                   fontSize: '12px',
                   minHeight: '80px',
+                  resize: 'none',
+                  fontFamily: 'inherit',
+                }}
+              />
+            </div>
+
+            {/* REMEDIAL ACTION */}
+            <div>
+              <label style={{ display: 'block', color: '#999', fontSize: '12px', fontWeight: '600', marginBottom: '6px' }}>
+                Remedial Action
+              </label>
+              <textarea
+                value={remedialAction}
+                onChange={(e) => setRemedialAction(e.target.value)}
+                placeholder="Recommended action to fix this defect..."
+                style={{
+                  width: '100%',
+                  padding: '8px',
+                  backgroundColor: '#1a1a1a',
+                  color: '#fff',
+                  border: '1px solid #333',
+                  borderRadius: '4px',
+                  fontSize: '12px',
+                  minHeight: '60px',
                   resize: 'none',
                   fontFamily: 'inherit',
                 }}
@@ -759,7 +795,7 @@ export function AnnotationTool({
                   e.currentTarget.style.backgroundColor = '#DC143C';
                 }}
               >
-                Save
+                💾 Save Defect #{existingAnnotationCount + 1}
               </button>
             </div>
           </div>

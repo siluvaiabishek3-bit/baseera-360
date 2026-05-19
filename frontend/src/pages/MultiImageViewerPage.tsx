@@ -315,35 +315,46 @@ useEffect(() => {
   const handleSaveAnnotation = async (annotation: any) => {
   const imageId = imagePairs[currentPairIndex]?.[annotationImageType === 'rgb' ? 'rgb' : annotationImageType === 'thermal' ? 'thermal' : 'zoom']?.id;
   if (!imageId) return;
-
+ 
   try {
-    // Get next global defect number
     const globalDefectNumber = getNextDefectNumber(id);
-
-    // Add globalDefectNumber to annotation
+ 
+    // The annotation object already contains annotatedImageData from AnnotationTool
+    // We just need to add the globalDefectNumber and save
     const annotationWithNumber = {
       ...annotation,
       globalDefectNumber,
+      // annotatedImageData is already in annotation object from AnnotationTool
     };
-
+ 
+    console.log('📤 Saving annotation:', {
+      defectType: annotationWithNumber.defectType,
+      severity: annotationWithNumber.severity,
+      hasAnnotatedImage: !!annotationWithNumber.annotatedImageData,
+      imageSizeKB: annotationWithNumber.annotatedImageData ? (annotationWithNumber.annotatedImageData.length / 1024).toFixed(2) : 0,
+      globalDefectNumber: globalDefectNumber,
+    });
+ 
     // Save to database
     await mockAPI.createAnnotation({
       projectId: id,
       mediaId: imageId,
       ...annotationWithNumber,
     });
-
+ 
     // Update local state
     setAnnotationsByImage((prev) => ({
       ...prev,
       [imageId]: [...(prev[imageId] || []), annotationWithNumber],
     }));
-
+ 
+    console.log('✅ Annotation saved successfully!');
     setShowAnnotationModal(false);
     setAnnotationImageType(null);
     setAnnotationImageData('');
   } catch (error) {
     console.error('Error saving annotation:', error);
+    alert('Failed to save annotation. Check console for details.');
   }
 };
 

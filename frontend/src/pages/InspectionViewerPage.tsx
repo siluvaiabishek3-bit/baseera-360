@@ -1,18 +1,20 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
+import { mockAPI } from '@/services/mockDataService';
 import { 
   ArrowLeft, ZoomIn, ZoomOut, Maximize2, RotateCw, Download, 
-  Plus, MapPin, AlertCircle, Edit, Trash2, Save, X 
+  Plus, AlertCircle, Edit, Trash2, Save, X, Image as ImageIcon
 } from 'lucide-react';
 
 interface Annotation {
   id: string;
-  x: number;
-  y: number;
-  type: string;
+  globalDefectNumber?: number;
+  type?: string;
+  defectType?: string;
   severity: string;
   description: string;
-  remedialAction: string;
+  remedialAction?: string;
+  annotatedImageData?: string;
 }
 
 export function InspectionViewerPage() {
@@ -25,6 +27,8 @@ export function InspectionViewerPage() {
   const [selectedAnnotation, setSelectedAnnotation] = useState<Annotation | null>(null);
   const [isAddingAnnotation, setIsAddingAnnotation] = useState(false);
   const [showAnnotationForm, setShowAnnotationForm] = useState(false);
+  const [displayImage, setDisplayImage] = useState<string>('');
+  const [loading, setLoading] = useState(true);
   const [newAnnotation, setNewAnnotation] = useState({
     x: 0,
     y: 0,
@@ -36,36 +40,45 @@ export function InspectionViewerPage() {
   const imageRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    // Mock image data
-    setImage({
-      id: imageId,
-      projectId: projectId,
-      filename: 'facade-inspection-001.jpg',
-      url: '/placeholder-image.jpg', // You'll add real images later
-    });
-
-    // Mock annotations
-    setAnnotations([
-      {
-        id: '1',
-        x: 30,
-        y: 40,
-        type: 'CRACK',
-        severity: 'HIGH',
-        description: 'Vertical crack in concrete',
-        remedialAction: 'Seal and monitor',
-      },
-      {
-        id: '2',
-        x: 60,
-        y: 25,
-        type: 'SPALLING',
-        severity: 'CRITICAL',
-        description: 'Concrete spalling with exposed rebar',
-        remedialAction: 'Immediate repair required',
-      },
-    ]);
+    fetchImageAndAnnotations();
   }, [projectId, imageId]);
+
+  const fetchImageAndAnnotations = async () => {
+    try {
+      setLoading(true);
+
+      // Fetch the media item
+      const allMedia = await mockAPI.getMediaByProject(projectId);
+      const mediaItem = allMedia.find((m: any) => m.id === imageId);
+      setImage(mediaItem);
+
+      if (!mediaItem) {
+        console.error('Image not found');
+        setLoading(false);
+        return;
+      }
+
+      // Set display image - use imageData from media
+      setDisplayImage(mediaItem.imageData || '/placeholder-image.jpg');
+
+      // Fetch all annotations for this project
+      const allAnnotations = await mockAPI.getAnnotationsByProject(projectId);
+      
+      // Filter annotations for this specific media
+      const mediaAnnotations = allAnnotations.filter(
+        (a: any) => a.mediaId === imageId
+      );
+
+      console.log('📸 Loaded image:', mediaItem.filename);
+      console.log('📌 Found annotations for this image:', mediaAnnotations.length);
+      
+      setAnnotations(mediaAnnotations);
+    } catch (error) {
+      console.error('Error loading image:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleImageClick = (e: React.MouseEvent<HTMLDivElement>) => {
     if (!isAddingAnnotation) return;
@@ -99,16 +112,6 @@ export function InspectionViewerPage() {
   const handleDeleteAnnotation = (id: string) => {
     setAnnotations(annotations.filter(a => a.id !== id));
     setSelectedAnnotation(null);
-  };
-
-  const getSeverityColor = (severity: string) => {
-    switch (severity) {
-      case 'CRITICAL': return 'bg-red-500';
-      case 'HIGH': return 'bg-orange-500';
-      case 'MEDIUM': return 'bg-yellow-500';
-      case 'LOW': return 'bg-blue-500';
-      default: return 'bg-gray-500';
-    }
   };
 
   return (
@@ -177,60 +180,103 @@ export function InspectionViewerPage() {
       <div className="flex-1 flex overflow-hidden">
         {/* IMAGE VIEWER */}
         <div className="flex-1 relative overflow-hidden bg-gray-900 flex items-center justify-center">
-          {isAddingAnnotation && (
-            <div className="absolute top-4 left-1/2 transform -translate-x-1/2 bg-blue-600 text-white px-6 py-3 rounded-lg shadow-lg z-10">
-              Click on the image to mark a defect location
+          {loading ? (
+            <div className="text-center text-white">
+              <div className="inline-block animate-spin w-12 h-12 border-4 border-blue-500 border-t-transparent rounded-full mb-4"></div>
+              <p>Loading image...</p>
             </div>
-          )}
+          ) : (
+            <>
+              {isAddingAnnotation && (
+                <div className="absolute top-4 left-1/2 transform -translate-x-1/2 bg-blue-600 text-white px-6 py-3 rounded-lg shadow-lg z-10">
+                  Click on the image to mark a defect location
+                </div>
+              )}
 
-          <div
-            ref={imageRef}
-            onClick={handleImageClick}
-            className="relative cursor-crosshair"
-            style={{
-              transform: `scale(${zoom}) rotate(${rotation}deg)`,
-              transition: 'transform 0.3s ease',
-            }}
-          >
-            {/* PLACEHOLDER IMAGE */}
-            <div className="w-[800px] h-[600px] bg-gray-800 border-2 border-gray-700 rounded-lg flex items-center justify-center">
-              <div className="text-center">
-                <MapPin size={48} className="text-gray-600 mx-auto mb-4" />
-                <p className="text-gray-400">Image will appear here</p>
-                <p className="text-gray-500 text-sm mt-2">Upload images in Project Details</p>
-              </div>
-            </div>
-
-            {/* ANNOTATIONS */}
-            {annotations.map((annotation) => (
               <div
-                key={annotation.id}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setSelectedAnnotation(annotation);
-                }}
-                className="absolute cursor-pointer transform -translate-x-1/2 -translate-y-1/2"
+                ref={imageRef}
+                onClick={handleImageClick}
+                className="relative cursor-crosshair"
                 style={{
-                  left: `${annotation.x}%`,
-                  top: `${annotation.y}%`,
+                  transform: `scale(${zoom}) rotate(${rotation}deg)`,
+                  transition: 'transform 0.3s ease',
                 }}
               >
-                <div className={`w-8 h-8 ${getSeverityColor(annotation.severity)} rounded-full border-4 border-white shadow-lg flex items-center justify-center animate-pulse`}>
-                  <MapPin size={16} className="text-white" />
-                </div>
-                <div className="absolute top-10 left-1/2 transform -translate-x-1/2 bg-white px-3 py-1 rounded shadow-lg whitespace-nowrap text-xs font-semibold">
-                  {annotation.type}
-                </div>
+                {/* DISPLAY ACTUAL IMAGE */}
+                {displayImage ? (
+                  <div className="relative w-[800px] h-[600px] rounded-lg overflow-hidden">
+                    <img
+                      src={displayImage}
+                      alt={image?.filename || 'Inspection Image'}
+                      className="w-full h-full object-cover"
+                    />
+                    
+                    {/* Show annotated images if available */}
+                    {annotations.map((annotation) => (
+                      <div key={annotation.id}>
+                        {annotation.annotatedImageData && (
+                          <div className="absolute inset-0 opacity-80">
+                            <img
+                              src={annotation.annotatedImageData}
+                              alt={`Annotation #${annotation.globalDefectNumber}`}
+                              className="w-full h-full object-cover"
+                            />
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="w-[800px] h-[600px] bg-gray-800 border-2 border-gray-700 rounded-lg flex items-center justify-center">
+                    <div className="text-center">
+                      <ImageIcon size={48} className="text-gray-600 mx-auto mb-4" />
+                      <p className="text-gray-400">No image available</p>
+                    </div>
+                  </div>
+                )}
+
+                {/* DEFECT MARKERS ON IMAGE */}
+                {annotations.map((annotation) => (
+                  <div
+                    key={annotation.id}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setSelectedAnnotation(annotation);
+                    }}
+                    className="absolute cursor-pointer"
+                    style={{
+                      left: '50%',
+                      top: '50%',
+                      transform: 'translate(-50%, -50%)',
+                    }}
+                  >
+                    <div
+                      className="w-10 h-10 rounded-full border-4 border-white shadow-lg flex items-center justify-center font-bold text-white text-sm animate-pulse"
+                      style={{
+                        backgroundColor:
+                          annotation.severity === 'CRITICAL'
+                            ? '#DC143C'
+                            : annotation.severity === 'HIGH'
+                            ? '#FF6600'
+                            : annotation.severity === 'MEDIUM'
+                            ? '#FFC107'
+                            : '#4CAF50',
+                      }}
+                    >
+                      {annotation.globalDefectNumber || '?'}
+                    </div>
+                  </div>
+                ))}
               </div>
-            ))}
-          </div>
+            </>
+          )}
         </div>
 
         {/* SIDEBAR */}
         <div className="w-96 bg-gray-800 border-l border-gray-700 overflow-y-auto">
           <div className="p-6">
             <h2 className="text-white font-bold text-xl mb-4">
-              Defects ({annotations.length})
+              📌 Defects ({annotations.length})
             </h2>
 
             <div className="space-y-4">
@@ -246,26 +292,60 @@ export function InspectionViewerPage() {
                 >
                   <div className="flex items-start justify-between mb-3">
                     <div className="flex items-center gap-2">
-                      <div className={`w-3 h-3 ${getSeverityColor(annotation.severity)} rounded-full`}></div>
-                      <span className="text-white font-semibold">{annotation.type}</span>
+                      <div
+                        className="w-6 h-6 rounded-full flex items-center justify-center font-bold text-white text-xs"
+                        style={{
+                          backgroundColor:
+                            annotation.severity === 'CRITICAL'
+                              ? '#DC143C'
+                              : annotation.severity === 'HIGH'
+                              ? '#FF6600'
+                              : annotation.severity === 'MEDIUM'
+                              ? '#FFC107'
+                              : '#4CAF50',
+                        }}
+                      >
+                        {annotation.globalDefectNumber}
+                      </div>
+                      <span className="text-white font-semibold">
+                        {annotation.defectType || annotation.type || 'Defect'}
+                      </span>
                     </div>
-                    <span className={`text-xs px-2 py-1 rounded ${getSeverityColor(annotation.severity)} text-white`}>
+                    <span
+                      className="text-xs px-2 py-1 rounded text-white font-bold"
+                      style={{
+                        backgroundColor:
+                          annotation.severity === 'CRITICAL'
+                            ? '#DC143C'
+                            : annotation.severity === 'HIGH'
+                            ? '#FF6600'
+                            : annotation.severity === 'MEDIUM'
+                            ? '#FFC107'
+                            : '#4CAF50',
+                      }}
+                    >
                       {annotation.severity}
                     </span>
                   </div>
 
                   <p className="text-gray-300 text-sm mb-2">{annotation.description}</p>
-                  
+
+                  {annotation.annotatedImageData && (
+                    <div className="bg-green-900 text-green-200 text-xs px-2 py-1 rounded mb-2 flex items-center gap-1">
+                      <ImageIcon size={12} />
+                      ✓ Annotated image available
+                    </div>
+                  )}
+
                   <div className="pt-3 border-t border-gray-600">
                     <p className="text-gray-400 text-xs mb-1">Remedial Action:</p>
-                    <p className="text-gray-300 text-sm">{annotation.remedialAction}</p>
+                    <p className="text-gray-300 text-sm">{annotation.remedialAction || 'N/A'}</p>
                   </div>
 
                   <div className="flex gap-2 mt-3">
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
-                        // Edit functionality
                       }}
                       className="flex-1 flex items-center justify-center gap-1 bg-gray-600 hover:bg-gray-500 text-white px-3 py-2 rounded transition text-sm"
                     >
@@ -289,8 +369,8 @@ export function InspectionViewerPage() {
               {annotations.length === 0 && (
                 <div className="text-center py-8">
                   <AlertCircle size={48} className="text-gray-600 mx-auto mb-3" />
-                  <p className="text-gray-400">No defects marked yet</p>
-                  <p className="text-gray-500 text-sm mt-1">Click "Add Defect" to start</p>
+                  <p className="text-gray-400">No defects found for this image</p>
+                  <p className="text-gray-500 text-sm mt-1">Use the annotation tool or go to reports</p>
                 </div>
               )}
             </div>

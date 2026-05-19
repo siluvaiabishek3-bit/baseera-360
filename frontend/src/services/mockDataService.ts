@@ -3,22 +3,25 @@
  * Simulates backend API with proper data structure
  */
 
-interface MediaItem {
+interface Annotation {
   id: string;
   projectId: string;
+  mediaId: string;
+  type: string;
+  defectType: string;
+  severity: string;
+  description: string;
   phase: string;
   floor: string;
-  type: 'rgb' | 'thermal' | 'zoom';
-  imageData: string;
-  uploadedAt: string;
-  timestamp: number;
-  captureTime?: number;
-  geoTag: { x: number; y: number; z: number };
-  hasRadiometricData: boolean;
-  exifHash?: string;
-  filename?: string;
-  cameraMake?: string;
-  cameraModel?: string;
+  remedialAction?: string;
+  globalDefectNumber?: number;
+  temperature?: any;
+  temperatureData?: any;
+  points?: any[];
+  startPoint?: any;
+  number?: number;
+  annotatedImageData?: string;
+  createdAt: string;
 }
 
 interface Project {
@@ -319,25 +322,24 @@ class MockAPI {
   }
 
   async createAnnotation(data: any): Promise<Annotation> {
-    await this.delay();
-    const newAnnotation: Annotation = {
-      id: `annotation-${Date.now()}-${Math.random()}`,
-      createdAt: new Date().toLocaleString(),
-      ...data,
-    };
-    this.annotations.push(newAnnotation);
-    console.log('Annotation saved:', newAnnotation.id);
-    return newAnnotation;
-  }
-
-  async updateAnnotation(id: string, data: any): Promise<Annotation> {
-    await this.delay();
-    const annotation = this.annotations.find((a) => a.id === id);
-    if (annotation) {
-      Object.assign(annotation, data);
-    }
-    return annotation!;
-  }
+  await this.delay();
+  
+  const mediaItem = this.media.find((m) => m.id === data.mediaId);
+  
+  const newAnnotation: Annotation = {
+    id: `annotation-${Date.now()}-${Math.random()}`,
+    createdAt: new Date().toLocaleString(),
+    phase: mediaItem?.phase || data.phase || 'Unknown Phase',
+    floor: mediaItem?.floor || data.floor || 'Unknown Floor',
+    remedialAction: data.remedialAction || '',
+    globalDefectNumber: data.globalDefectNumber,
+    annotatedImageData: data.annotatedImageData || '', // ← PRESERVE ANNOTATED IMAGE
+    ...data,
+  };
+  
+  this.annotations.push(newAnnotation);
+  return newAnnotation;
+}
 
   async deleteAnnotation(id: string): Promise<void> {
     await this.delay();
@@ -397,5 +399,219 @@ class MockAPI {
     console.log('All data reset');
   }
 }
+// ============================================
+// 3D MODEL STORAGE (Local File System)
+// ============================================
 
+interface Model3D {
+  id: string;
+  projectId: string;
+  fileName: string;
+  fileFormat: 'OBJ' | 'FBX' | 'GLTF' | 'GLB';
+  filePath: string;
+  fileSize: number;
+  phase: string;
+  floor: string;
+  uploadedAt: string;
+  createdBy: string;
+  defectPositions: {
+    defectId: string;
+    globalDefectNumber: number;
+    position3D: {
+      x: number;
+      y: number;
+      z: number;
+    };
+    defectType: string;
+    severity: string;
+  }[];
+  metadata?: {
+    boundingBox?: {
+      min: { x: number; y: number; z: number };
+      max: { x: number; y: number; z: number };
+    };
+    scale: number;
+    cameraState?: {
+      position: [number, number, number];
+      target: [number, number, number];
+    };
+  };
+}
+
+const model3DStorage: Map<string, Model3D> = new Map();
+
+export const model3DAPI = {
+  async uploadModel(
+    projectId: string,
+    file: File,
+    phase: string,
+    floor: string,
+    userId: string
+  ): Promise<Model3D> {
+    const fileExtension = file.name.split('.').pop()?.toLowerCase() as any;
+    const validFormats = ['obj', 'fbx', 'gltf', 'glb'];
+
+    if (!validFormats.includes(fileExtension)) {
+      throw new Error(`Invalid format. Supported: ${validFormats.join(', ')}`);
+    }
+
+    if (file.size > 100 * 1024 * 1024) {
+      throw new Error('File too large. Max 100 MB');
+    }
+
+    const modelId = `model_${Date.now()}`;
+    const filePath = `/models/${projectId}/${modelId}/${file.name}`;
+
+    const fileDataUrl = await fileToDataUrl(file);
+    localStorage.setItem(`model_file_${modelId}`, fileDataUrl);
+
+    const model3D: Model3D = {
+      id: modelId,
+      projectId,
+      fileName: file.name,
+      fileFormat: fileExtension,
+      filePath,
+      fileSize: file.size,
+      phase,
+      floor,
+      uploadedAt: new Date().toISOString(),
+      createdBy: userId,
+      defectPositions: [],
+      metadata: {
+        scale: 1,
+      },
+    };
+
+    model3DStorage.set(modelId, model3D);
+    console.log(`✅ Model uploaded: ${modelId}`);
+
+    return model3D;
+  },
+
+  async getModelById(modelId: string): Promise<Model3D | null> {
+    return model3DStorage.get(modelId) || null;
+  },
+
+  async getModelsByProject(projectId: string): Promise<Model3D[]> {
+    return Array.from(model3DStorage.values()).filter(
+      (m) => m.projectId === projectId
+    );
+  },
+
+  async addDefectPosition(
+    modelId: string,
+    defectId: string,
+    globalDefectNumber: number,
+    position3D: { x: number; y: number; z: number },
+    defectType: string,
+    severity: string
+  ): Promise<Model3D> {
+    const model = model3DStorage.get(modelId);
+    if (!model) throw new Error('Model not found');
+
+    const existingIndex = model.defectPositions.findIndex(
+      (d) => d.defectId === defectId
+    );
+
+    const position = {
+      defectId,
+      globalDefectNumber,
+      position3D,
+      defectType,
+      severity,
+    };
+
+    if (existingIndex >= 0) {
+      model.defectPositions[existingIndex] = position;
+    } else {
+      model.defectPositions.push(position);
+    }
+
+    model3DStorage.set(modelId, model);
+    console.log(`✅ Defect positioned: ${defectId}`);
+
+    return model;
+  },
+
+  async removeDefectPosition(
+    modelId: string,
+    defectId: string
+  ): Promise<Model3D> {
+    const model = model3DStorage.get(modelId);
+    if (!model) throw new Error('Model not found');
+
+    model.defectPositions = model.defectPositions.filter(
+      (d) => d.defectId !== defectId
+    );
+
+    model3DStorage.set(modelId, model);
+    console.log(`✅ Defect removed from model: ${defectId}`);
+
+    return model;
+  },
+
+  async updateModelMetadata(
+    modelId: string,
+    updates: {
+      phase?: string;
+      floor?: string;
+      cameraState?: any;
+      boundingBox?: any;
+      scale?: number;
+    }
+  ): Promise<Model3D> {
+    const model = model3DStorage.get(modelId);
+    if (!model) throw new Error('Model not found');
+
+    if (updates.phase) model.phase = updates.phase;
+    if (updates.floor) model.floor = updates.floor;
+    if (updates.cameraState) {
+      if (!model.metadata) model.metadata = {};
+      model.metadata.cameraState = updates.cameraState;
+    }
+    if (updates.boundingBox) {
+      if (!model.metadata) model.metadata = {};
+      model.metadata.boundingBox = updates.boundingBox;
+    }
+    if (updates.scale !== undefined) {
+      if (!model.metadata) model.metadata = {};
+      model.metadata.scale = updates.scale;
+    }
+
+    model3DStorage.set(modelId, model);
+    console.log(`✅ Model metadata updated: ${modelId}`);
+
+    return model;
+  },
+
+  async getModelFile(modelId: string): Promise<Blob | null> {
+    const fileDataUrl = localStorage.getItem(`model_file_${modelId}`);
+    if (!fileDataUrl) return null;
+
+    const response = await fetch(fileDataUrl);
+    return response.blob();
+  },
+
+  async deleteModel(modelId: string): Promise<void> {
+    model3DStorage.delete(modelId);
+    localStorage.removeItem(`model_file_${modelId}`);
+    console.log(`✅ Model deleted: ${modelId}`);
+  },
+
+  async exportModelData(modelId: string): Promise<string> {
+    const model = model3DStorage.get(modelId);
+    if (!model) throw new Error('Model not found');
+
+    return JSON.stringify(model, null, 2);
+  },
+};
+
+function fileToDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result as string);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
 export const mockAPI = new MockAPI();

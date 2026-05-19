@@ -3,8 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { ArrowLeft, Upload, FolderOpen, FileText, Image as ImageIcon, X, ZoomIn, ZoomOut, Trash2 } from 'lucide-react';
 import { mockAPI } from '@/services/mockDataService';
 import UploadMediaModal from '@/components/uploadMediaModal';
-import ReportConfig from '@/components/ReportConfig';
-import { generatePDFReport } from '@/services/pdfReportGenerator';
+import ReportsTab from '@/components/ReportsTab';
 
 export function ProjectDetailsPage() {
   const navigate = useNavigate();
@@ -13,7 +12,6 @@ export function ProjectDetailsPage() {
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<'overview' | 'media' | 'analytics' | 'inspections' | 'reports'>('overview');
   const [showUploadModal, setShowUploadModal] = useState(false);
-  const [showReportConfig, setShowReportConfig] = useState(false);
   const [stats, setStats] = useState<any>(null);
   const [allAnnotations, setAllAnnotations] = useState<any[]>([]);
   const [media, setMedia] = useState<any[]>([]);
@@ -26,6 +24,7 @@ export function ProjectDetailsPage() {
   const [selectedImageType, setSelectedImageType] = useState<'rgb' | 'thermal' | 'zoom' | null>(null);
   const [showImageViewer, setShowImageViewer] = useState(false);
   const [viewingImage, setViewingImage] = useState<any>(null);
+  const [viewingAnnotation, setViewingAnnotation] = useState<any>(null);
   const [imageZoom, setImageZoom] = useState(100);
 
   useEffect(() => {
@@ -112,8 +111,9 @@ export function ProjectDetailsPage() {
     return mediaItem.hasRadiometricData ? '✓ Has Data' : '⚠️ No Data';
   };
 
-  const openImageViewer = (image: any) => {
+  const openImageViewer = (image: any, annotation?: any) => {
     setViewingImage(image);
+    setViewingAnnotation(annotation || null);
     setImageZoom(100);
     setShowImageViewer(true);
   };
@@ -121,6 +121,7 @@ export function ProjectDetailsPage() {
   const closeImageViewer = () => {
     setShowImageViewer(false);
     setViewingImage(null);
+    setViewingAnnotation(null);
     setImageZoom(100);
   };
 
@@ -131,6 +132,18 @@ export function ProjectDetailsPage() {
         fetchData();
       } catch (error) {
         console.error('Error deleting image:', error);
+      }
+    }
+  };
+
+  const handleDeleteAnnotation = async (annotationId: string) => {
+    if (window.confirm('Are you sure you want to delete this annotation/defect?')) {
+      try {
+        await mockAPI.deleteAnnotation(annotationId);
+        closeImageViewer();
+        fetchData();
+      } catch (error) {
+        console.error('Error deleting annotation:', error);
       }
     }
   };
@@ -319,29 +332,6 @@ export function ProjectDetailsPage() {
           }}
         >
           📐 CAD Viewer
-        </button>
-
-        <button
-          onClick={() => setShowReportConfig(true)}
-          style={{
-            padding: '12px 16px',
-            backgroundColor: '#DC143C',
-            color: 'white',
-            border: 'none',
-            borderRadius: '6px',
-            cursor: 'pointer',
-            fontWeight: '600',
-            fontSize: '14px',
-            transition: 'all 0.3s',
-          }}
-          onMouseEnter={(e) => {
-            e.currentTarget.style.backgroundColor = '#B91C3C';
-          }}
-          onMouseLeave={(e) => {
-            e.currentTarget.style.backgroundColor = '#DC143C';
-          }}
-        >
-          📄 Generate Report
         </button>
       </div>
 
@@ -1211,9 +1201,10 @@ export function ProjectDetailsPage() {
           height: '150px',
           backgroundColor: '#e5e7eb',
           overflow: 'hidden',
+          position: 'relative',
         }}>
           <img
-            src={mediaItem.imageData}
+            src={annotation.annotatedImageData || mediaItem.imageData}
             alt={mediaItem.type}
             style={{
               width: '100%',
@@ -1221,8 +1212,25 @@ export function ProjectDetailsPage() {
               objectFit: 'cover',
               cursor: 'pointer',
             }}
-            onClick={() => openImageViewer(mediaItem)}
+            onClick={() => openImageViewer(mediaItem, annotation)}
           />
+          {/* Badge showing annotated image is being displayed */}
+          {annotation.annotatedImageData && (
+            <div style={{
+              position: 'absolute',
+              top: '6px',
+              right: '6px',
+              backgroundColor: '#4CAF50',
+              color: 'white',
+              padding: '4px 8px',
+              borderRadius: '4px',
+              fontSize: '10px',
+              fontWeight: 'bold',
+              boxShadow: '0 2px 4px rgba(0,0,0,0.2)',
+            }}>
+              ✓ Annotated
+            </div>
+          )}
         </div>
 
         {/* INFO */}
@@ -1293,14 +1301,16 @@ export function ProjectDetailsPage() {
 )}
 
       {/* REPORTS TAB */}
-      {activeTab === 'reports' && (
-        <div style={{ backgroundColor: 'white', padding: '24px', borderRadius: '8px', border: '1px solid #e5e7eb' }}>
-          <h2 style={{ fontSize: '18px', fontWeight: 'bold', color: '#1a1a1a', marginBottom: '16px' }}>
-            Reports
-          </h2>
-          <p style={{ color: '#666', margin: 0 }}>Generated reports will appear here...</p>
-        </div>
-      )}
+{activeTab === 'reports' && (
+  <ReportsTab
+    projectId={id!}
+    projectName={project?.name || 'Unknown'}
+    buildingName={project?.buildingName || 'Unknown'}
+    allAnnotations={allAnnotations}
+    stats={stats}
+    media={media}
+  />
+)}
 
       {/* IMAGE VIEWER MODAL */}
       {showImageViewer && viewingImage && (
@@ -1366,7 +1376,13 @@ export function ProjectDetailsPage() {
                 <ZoomIn size={16} />
               </button>
               <button
-                onClick={() => handleDeleteImage(viewingImage.id)}
+                onClick={() => {
+                  if (viewingAnnotation) {
+                    handleDeleteAnnotation(viewingAnnotation.id);
+                  } else {
+                    handleDeleteImage(viewingImage.id);
+                  }
+                }}
                 style={{
                   padding: '8px 12px',
                   backgroundColor: '#DC143C',
@@ -1379,9 +1395,10 @@ export function ProjectDetailsPage() {
                   alignItems: 'center',
                   gap: '6px',
                 }}
+                title={viewingAnnotation ? 'Delete this defect/annotation' : 'Delete this image'}
               >
                 <Trash2 size={16} />
-                Delete
+                {viewingAnnotation ? 'Delete Defect' : 'Delete Image'}
               </button>
               <button
                 onClick={closeImageViewer}
@@ -1413,10 +1430,11 @@ export function ProjectDetailsPage() {
               alignItems: 'center',
               justifyContent: 'center',
               padding: '24px',
+              position: 'relative',
             }}
           >
             <img
-              src={viewingImage.imageData}
+              src={viewingAnnotation?.annotatedImageData || viewingImage.imageData}
               alt="Viewing"
               style={{
                 maxWidth: '100%',
@@ -1425,6 +1443,23 @@ export function ProjectDetailsPage() {
                 transition: 'transform 0.2s',
               }}
             />
+            {/* Annotated image indicator */}
+            {viewingAnnotation?.annotatedImageData && (
+              <div style={{
+                position: 'absolute',
+                top: '24px',
+                right: '24px',
+                backgroundColor: '#4CAF50',
+                color: 'white',
+                padding: '8px 12px',
+                borderRadius: '6px',
+                fontSize: '12px',
+                fontWeight: 'bold',
+                boxShadow: '0 4px 6px rgba(0,0,0,0.3)',
+              }}>
+                ✓ Annotated Image
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -1435,33 +1470,6 @@ export function ProjectDetailsPage() {
           projectId={id!}
           onClose={() => setShowUploadModal(false)}
           onSuccess={handleUploadSuccess}
-        />
-      )}
-
-      {showReportConfig && (
-        <ReportConfig
-          project={project}
-          onGenerate={async (config) => {
-            try {
-              const annotations = await mockAPI.getAnnotations();
-              const projectAnnotations = annotations.filter((a) => a.projectId === id);
-
-              await generatePDFReport(
-                project.name,
-                project.jobNumber,
-                project.clientName,
-                config.companyName,
-                projectAnnotations,
-                config
-              );
-
-              setShowReportConfig(false);
-            } catch (error) {
-              console.error('Error generating report:', error);
-              alert('Error generating report');
-            }
-          }}
-          onCancel={() => setShowReportConfig(false)}
         />
       )}
     </div>
